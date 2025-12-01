@@ -1,12 +1,6 @@
 import 'package:flutter/material.dart';
+import '../app_colors.dart';
 
-// Simple project theme fallback used by this file when a shared AppTheme
-// definition is not present elsewhere. Adjust the color to match your app.
-class AppTheme {
-  static const Color primary = Color(0xFF2FA84F);
-}
-
-/// Notes screen (editable, add/edit/delete)
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
 
@@ -22,7 +16,10 @@ class _NotesScreenState extends State<NotesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notes'),
-        leading: const BackButton(color: AppTheme.primary),
+        leading: const BackButton(color: AppColors.green),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 1,
       ),
       body: notes.isEmpty
           ? const Center(
@@ -36,7 +33,7 @@ class _NotesScreenState extends State<NotesScreen> {
               itemCount: notes.length,
               itemBuilder: (context, index) {
                 return Card(
-                  elevation: 4,
+                  elevation: 2,
                   child: ListTile(
                     title: Text(
                       notes[index]['title'] ?? '',
@@ -77,7 +74,7 @@ class _NotesScreenState extends State<NotesScreen> {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: AppTheme.primary,
+        backgroundColor: AppColors.green,
         onPressed: () {
           Navigator.push(
             context,
@@ -92,7 +89,7 @@ class _NotesScreenState extends State<NotesScreen> {
             ),
           );
         },
-          child: const Icon(Icons.add),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -151,7 +148,8 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.note == null ? 'New Note' : 'Edit Note'),
-        backgroundColor: AppTheme.primary,
+        backgroundColor: AppColors.green,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
@@ -194,11 +192,11 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.green),
                   onPressed: _isEditing ? saveNote : null,
                   child: const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text('Save'),
+                    child: Text('Save', style: TextStyle(color: Colors.white)),
                   ),
                 ),
               ),
@@ -207,17 +205,14 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
                 onPressed: () {
                   setState(() {
                     if (_isEditing) {
-                      // Cancel edits: revert to original values
                       if (widget.note != null) {
                         titleController.text = _originalTitle ?? '';
                         contentController.text = _originalContent ?? '';
                         _isEditing = false;
                       } else {
-                        // If creating a new note and cancel, just go back
                         Navigator.pop(context);
                       }
                     } else {
-                      // Enter editing mode
                       _isEditing = true;
                     }
                   });

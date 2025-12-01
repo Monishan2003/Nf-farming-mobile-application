@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_colors.dart';
-import '../bottom_footer.dart';
+import '../field_footer.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() { runApp(const NatureFarmingApp()); }

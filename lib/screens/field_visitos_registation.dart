@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_colors.dart';
-import '../bottom_footer.dart';
+import '../manager_footer.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() { runApp(const NatureFarmingApp()); }
@@ -1020,7 +1020,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           ),
 
       ]),
-      bottomNavigationBar: const AppFooter(),
+      bottomNavigationBar: const ManagerFooter(currentIndex: 1),
     );
   }
 }

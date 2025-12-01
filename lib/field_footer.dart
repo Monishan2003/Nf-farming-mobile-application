@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 import '../app_colors.dart';
+import 'screens/notes_screen.dart';
+import 'screens/memberlist.dart';
+import 'screens/notifications_screen.dart';
+import 'screens/field_visitor_dashboard.dart';
+import 'screens/field_visitor_my_profile.dart';
+
 
 class AppFooter extends StatelessWidget {
   final int currentIndex;
@@ -43,31 +49,61 @@ class AppFooter extends StatelessWidget {
                   icon: Icons.home,
                   label: 'Home',
                   active: currentIndex == 0,
-                  onTap: () => onTap?.call(0),
+                  onTap: () {
+                    if (onTap != null) {
+                      onTap!(0);
+                    } else {
+                      _defaultNavigate(context, 0);
+                    }
+                  },
                 ),
                 _FooterItem(
                   icon: Icons.group,
                   label: 'Members',
                   active: currentIndex == 1,
-                  onTap: () => onTap?.call(1),
+                  onTap: () {
+                    if (onTap != null) {
+                      onTap!(1);
+                    } else {
+                      _defaultNavigate(context, 1);
+                    }
+                  },
                 ),
                 _FooterItem(
                   icon: Icons.note,
                   label: 'Notes',
                   active: currentIndex == 2,
-                  onTap: () => onTap?.call(2),
+                  onTap: () {
+                    if (onTap != null) {
+                      onTap!(2);
+                    } else {
+                      _defaultNavigate(context, 2);
+                    }
+                  },
                 ),
                 _FooterItem(
                   icon: Icons.notifications,
                   label: 'Notify',
                   active: currentIndex == 3,
-                  onTap: () => onTap?.call(3),
+                  onTap: () {
+                    if (onTap != null) {
+                      onTap!(3);
+                    } else {
+                      _defaultNavigate(context, 3);
+                    }
+                  },
                 ),
                 _FooterItem(
                   icon: Icons.person,
                   label: 'Profile',
                   active: currentIndex == 4,
-                  onTap: () => onTap?.call(4),
+                  onTap: () {
+                    if (onTap != null) {
+                      onTap!(4);
+                    } else {
+                      _defaultNavigate(context, 4);
+                    }
+                  },
                 ),
               ],
             ),
@@ -75,6 +111,38 @@ class AppFooter extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _defaultNavigate(BuildContext context, int index) {
+    // Fallback navigation mapping when onTap is not provided
+    if (index == 0) {
+      // Home -> Members list (as home screen)
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const FieldVisitorDashboard()),
+      );
+    } else if (index == 1) {
+      // Members -> Members list
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const MambersList()),
+      );
+    } else if (index == 2) {
+      // Notes
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const NotesScreen()),
+      );
+    } else if (index == 3) {
+      // Notifications
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+      );
+    } else if (index == 4) {
+      // Profile -> Field visitor profile
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const FieldVisitorMyProfileScreen()),
+      );
+    } else {
+      // Other tabs can be wired per-screen via onTap
+    }
   }
 }
 

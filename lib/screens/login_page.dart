@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'manager_dashboard.dart';
 import 'field_visitor_dashboard.dart';
+import '../session.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -177,6 +178,7 @@ class _LoginPageState extends State<LoginPage> {
                                 if (role == 'field') {
                                   if (username == 'field' && password == '1234') {
                                     valid = true;
+                                    AppSession.setFieldVisitor(name: 'Ravi Mohan', code: 'k001', phone: '0717000000');
                                     Navigator.of(context).pushReplacement(MaterialPageRoute(
                                       builder: (_) => const FieldVisitorDashboard(),
                                     ));
@@ -184,6 +186,7 @@ class _LoginPageState extends State<LoginPage> {
                                 } else {
                                   if (username == 'manager' && password == '1234') {
                                     valid = true;
+                                    AppSession.setManager(name: 'Ravi Mohan', code: 'k001');
                                     Navigator.of(context).pushReplacement(MaterialPageRoute(
                                       builder: (_) => const ManagerDashboard(),
                                     ));

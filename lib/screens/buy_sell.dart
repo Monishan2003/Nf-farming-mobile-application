@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
-import 'memberlist.dart' as mlist;
 import '../app_colors.dart';
-import '../bottom_footer.dart';
-import 'notification.dart';
+import '../field_footer.dart';
+// imports updated - footer navigation handled centrally by AppFooter
 // DevicePreview removed - running app without preview wrapper.
 import 'dart:math' as math;
 import 'dart:collection';
+import 'dart:typed_data';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
+import 'bill_detail_screen.dart';
+import '../session.dart';
 
 // Simple in-memory model to make future DB integration easy.
 class Farmer {
@@ -169,7 +174,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // current view: 'dashboard', 'buy', 'sell'
   String _view = 'dashboard';
-  int _navIndex = 0;
+  // navigation index removed - footer handles navigation centrally
 
   @override
   Widget build(BuildContext context) {
@@ -185,28 +190,10 @@ class _HomeScreenState extends State<HomeScreen> {
               onBuy: () => setState(() => _view = 'buy'),
               onSell: () => setState(() => _view = 'sell'),
             )
-          : (_view == 'buy' ? const BuyingScreen() : const SellingScreen()),
-      bottomNavigationBar: AppFooter(
-        currentIndex: _navIndex,
-        onTap: (i) {
-          setState(() {
-            _navIndex = i;
-          });
-          if (i == 0) {
-            setState(() => _view = 'dashboard');
-          } else if (i == 1) {
-            // push members dashboard preview
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const mlist.FieldVisitorDashboard()));
-          } else if (i == 2) {
-            // open Notes screen
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotesScreen()));
-          } else if (i == 3) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notifications not implemented')));
-          } else if (i == 4) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile not implemented')));
-          }
-        },
-      ),
+          : (_view == 'buy'
+              ? BuyingScreen(onFinished: () => setState(() => _view = 'dashboard'))
+              : SellingScreen(onFinished: () => setState(() => _view = 'dashboard'))),
+      bottomNavigationBar: const AppFooter(currentIndex: 0),
     );
   }
 }
@@ -239,8 +226,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final filtered = farmerStore.filteredFarmers;
     final selected = farmerStore.selected ?? (filtered.isNotEmpty ? filtered.first : null);
-    final buyTotal = farmerStore.totalBuyAll;
-    final sellTotal = farmerStore.totalSellAll;
+    final buyTotal = selected?.totalBuy ?? 0.0;
+    final sellTotal = selected?.totalSell ?? 0.0;
     // Totals are independent; no comparative percentage computed.
 
     return SingleChildScrollView(
@@ -350,7 +337,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        const Text('Total Buy', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text('Selected Total Buy', style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -373,7 +360,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        const Text('Total Sell', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text('Selected Total Sell', style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,7 +386,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class BuyingScreen extends StatefulWidget {
-  const BuyingScreen({super.key});
+  final VoidCallback? onFinished;
+  const BuyingScreen({super.key, this.onFinished});
 
   @override
   State<BuyingScreen> createState() => _BuyingScreenState();
@@ -486,11 +474,31 @@ class _BuyingScreenState extends State<BuyingScreen> {
           SizedBox(
             width: double.infinity,
               child: ElevatedButton(
-              onPressed: () {
-                // record to store (will ignore if no farmer selected)
+              onPressed: () async {
                 final amount = double.tryParse(_computeTotal()) ?? 0.0;
                 farmerStore.addBuy(amount);
-                setState(() => _stage = 'done');
+                final f = farmerStore.selected;
+                final billNo = _genBillNo(prefix: 'B');
+                final detail = BillDetailData(
+                  billNo: billNo,
+                  type: 'BUY',
+                  date: DateTime.now(),
+                  memberName: f?.name ?? 'Iben Israar',
+                  memberPhone: f?.mobile ?? '0717234478',
+                  memberAddress: f?.address ?? 'Jaffna,Srilanka',
+                  product: _selectedProduct,
+                  quantityLabel: 'Count',
+                  quantity: int.tryParse(_countController.text) ?? 0,
+                  unitPrice: double.tryParse(_priceController.text) ?? 0.0,
+                  total: amount,
+                  fieldVisitorName: AppSession.displayFieldName,
+                  fieldVisitorPhone: AppSession.displayFieldPhone,
+                  companyName: 'Nature Farming',
+                );
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
+                );
+                if (mounted) widget.onFinished?.call();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).primaryColor,
@@ -590,8 +598,19 @@ class _BuyingScreenState extends State<BuyingScreen> {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () => setState(() => _stage = 'confirmation'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, foregroundColor: Colors.white),
-                    child: const Text('Buy', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.shopping_cart),
+                        SizedBox(width: 8),
+                        Text('Proceed to Buy', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -618,7 +637,8 @@ class _BuyingScreenState extends State<BuyingScreen> {
 }
 
 class SellingScreen extends StatefulWidget {
-  const SellingScreen({super.key});
+  final VoidCallback? onFinished;
+  const SellingScreen({super.key, this.onFinished});
 
   @override
   State<SellingScreen> createState() => _SellingScreenState();
@@ -733,10 +753,31 @@ class _SellingScreenState extends State<SellingScreen> {
           SizedBox(
             width: double.infinity,
               child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final amount = double.tryParse(_computeSellTotal()) ?? 0.0;
                 farmerStore.addSell(amount);
-                setState(() => _stage = 'done');
+                final f = farmerStore.selected;
+                final billNo = _genBillNo(prefix: 'S');
+                final detail = BillDetailData(
+                  billNo: billNo,
+                  type: 'SELL',
+                  date: DateTime.now(),
+                  memberName: f?.name ?? 'Iben Israar',
+                  memberPhone: f?.mobile ?? '0717234478',
+                  memberAddress: f?.address ?? 'Jaffna,Srilanka',
+                  product: _selectedSellProduct,
+                  quantityLabel: 'Weight',
+                  quantity: int.tryParse(_weightController.text) ?? 0,
+                  unitPrice: double.tryParse(_sellPriceController.text) ?? 0.0,
+                  total: amount,
+                  fieldVisitorName: AppSession.displayFieldName,
+                  fieldVisitorPhone: AppSession.displayFieldPhone,
+                  companyName: 'Nature Farming',
+                );
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
+                );
+                if (mounted) widget.onFinished?.call();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
@@ -773,7 +814,7 @@ class _SellingScreenState extends State<SellingScreen> {
   Widget _buildHeader() {
     final f = farmerStore.selected;
     return Card(
-      color: Colors.green[100],
+      color: const Color(0xFFE6FFEF),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -984,3 +1025,204 @@ class SectionCard extends StatelessWidget {
 
 // A styled card showing a donut-style pie chart, legend and amount (used on Dashboard).
 // StatPieCard removed — dashboard uses simple stat cards + pie charts now.
+
+// ---------------------------
+// Bill popup + PDF utilities
+// ---------------------------
+
+class BillData {
+  final String billNo;
+  final String type; // BUY or SELL
+  final DateTime date;
+  final String customerName;
+  final String customerMobile;
+  final String customerAddress;
+  final String product;
+  final String quantityLabel; // Count or Weight
+  final int quantity;
+  final double unitPrice;
+  final double total;
+
+  BillData({
+    required this.billNo,
+    required this.type,
+    required this.date,
+    required this.customerName,
+    required this.customerMobile,
+    required this.customerAddress,
+    required this.product,
+    required this.quantityLabel,
+    required this.quantity,
+    required this.unitPrice,
+    required this.total,
+  });
+}
+
+String _genBillNo({required String prefix}) {
+  final now = DateTime.now();
+  final y = now.year.toString();
+  final m = now.month.toString().padLeft(2, '0');
+  final d = now.day.toString().padLeft(2, '0');
+  final seq = now.millisecondsSinceEpoch.toString().substring(8);
+  return 'NF-$prefix-$y$m$d-$seq';
+}
+
+Future<void> showBillDialog(BuildContext context, BillData data) async {
+  return showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) {
+      return AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        contentPadding: EdgeInsets.zero,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: AppColors.primaryGreen, borderRadius: const BorderRadius.only(topLeft: Radius.circular(14), topRight: Radius.circular(14))),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Nature Farming', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
+                  const SizedBox(height: 4),
+                  Text('${data.type} BILL  •  ${data.billNo}', style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _billRow('Date', _fmtDateTime(data.date)),
+                  _billRow('Customer', data.customerName),
+                  _billRow('Mobile', data.customerMobile),
+                  _billRow('Address', data.customerAddress),
+                  const Divider(height: 24),
+                  _billRow('Product', data.product),
+                  _billRow(data.quantityLabel, data.quantity.toString()),
+                  _billRow('Unit Price', data.unitPrice.toStringAsFixed(2)),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Total', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                      Text(data.total.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final bytes = await buildBillPdf(data);
+              await Printing.sharePdf(bytes: bytes, filename: 'NF_${data.type}_${data.billNo}.pdf');
+            },
+            icon: const Icon(Icons.download, size: 18, color: Colors.white),
+            label: const Text('Download', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryGreen),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Widget _billRow(String k, String v) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(k, style: const TextStyle(color: Colors.black54)),
+        Flexible(child: Text(v, textAlign: TextAlign.right)),
+      ],
+    ),
+  );
+}
+
+String _fmtDateTime(DateTime dt) {
+  final y = dt.year.toString().padLeft(4, '0');
+  final m = dt.month.toString().padLeft(2, '0');
+  final d = dt.day.toString().padLeft(2, '0');
+  final hh = dt.hour.toString().padLeft(2, '0');
+  final mm = dt.minute.toString().padLeft(2, '0');
+  return '$y-$m-$d $hh:$mm';
+}
+
+Future<Uint8List> buildBillPdf(BillData data) async {
+  final pdf = pw.Document();
+  final c = AppColors.primaryGreen;
+  final int a = ((c.a * 255.0).round() & 0xff);
+  final int r = ((c.r * 255.0).round() & 0xff);
+  final int g = ((c.g * 255.0).round() & 0xff);
+  final int b = ((c.b * 255.0).round() & 0xff);
+  final int argb = (a << 24) | (r << 16) | (g << 8) | b;
+  final green = PdfColor.fromInt(argb);
+
+  pdf.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      build: (pw.Context context) {
+        return pw.Container(
+          padding: const pw.EdgeInsets.all(24),
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              color: green,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    pw.Text('Nature Farming', style: pw.TextStyle(color: PdfColors.white, fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('${data.type} BILL', style: const pw.TextStyle(color: PdfColors.white))
+                  ]),
+                  pw.Text(data.billNo, style: const pw.TextStyle(color: PdfColors.white))
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 16),
+            _pdfKeyValue('Date', _fmtDateTime(data.date)),
+            _pdfKeyValue('Customer', data.customerName),
+            _pdfKeyValue('Mobile', data.customerMobile),
+            _pdfKeyValue('Address', data.customerAddress),
+            pw.SizedBox(height: 12),
+            pw.Divider(),
+            pw.SizedBox(height: 12),
+            _pdfKeyValue('Product', data.product),
+            _pdfKeyValue(data.quantityLabel, data.quantity.toString()),
+            _pdfKeyValue('Unit Price', data.unitPrice.toStringAsFixed(2)),
+            pw.SizedBox(height: 8),
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              pw.Text('Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+              pw.Text(data.total.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+            ]),
+          ]),
+        );
+      },
+    ),
+  );
+
+  return Uint8List.fromList(await pdf.save());
+}
+
+pw.Widget _pdfKeyValue(String k, String v) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+    child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+      pw.Text(k, style: const pw.TextStyle(color: PdfColors.grey)),
+      pw.Expanded(child: pw.Text(v, textAlign: pw.TextAlign.right)),
+    ]),
+  );
+}

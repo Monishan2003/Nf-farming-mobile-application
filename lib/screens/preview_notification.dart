@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'notification.dart';
+import 'notes_screen.dart';
 
 void main() => runApp(const PreviewNotesApp());
 

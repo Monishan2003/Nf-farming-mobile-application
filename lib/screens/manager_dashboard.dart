@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app_colors.dart';
+import 'field_visitor_profile.dart';
+import 'field_visitos_registation.dart';
+import '../manager_footer.dart';
+import '../session.dart';
 
 class ManagerDashboard extends StatelessWidget {
   const ManagerDashboard({super.key});
@@ -13,7 +17,7 @@ class ManagerDashboard extends StatelessWidget {
       data: Theme.of(context).copyWith(textTheme: textTheme),
       child: Scaffold(
         backgroundColor: AppColors.lightBg,
-        bottomNavigationBar: _buildBottomNavBar(),
+        bottomNavigationBar: const ManagerFooter(currentIndex: 0),
         body: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -31,9 +35,9 @@ class ManagerDashboard extends StatelessWidget {
                 const SizedBox(height: 18),
                 _buildMonthlyTrendBarChart(),
                 const SizedBox(height: 20),
-                _buildAddFieldVisitorButton(),
+                _buildAddFieldVisitorButton(context),
                 const SizedBox(height: 28),
-                _buildRecentVisitorsList(),
+                _buildRecentVisitorsList(context),
                 const SizedBox(height: 24),
               ],
             ),
@@ -89,7 +93,7 @@ class ManagerDashboard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Manager: John Doe',
+                      'Manager: ${AppSession.displayManagerName} (${AppSession.displayManagerCode})',
                       style: GoogleFonts.inter(
                         color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 12,
@@ -343,7 +347,7 @@ class ManagerDashboard extends StatelessWidget {
         decoration: BoxDecoration(color: c, shape: BoxShape.circle),
       );
 
-  Widget _buildAddFieldVisitorButton() {
+  Widget _buildAddFieldVisitorButton(BuildContext context) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
@@ -352,7 +356,11 @@ class ManagerDashboard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
-        onPressed: () {},
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const RegistrationScreen()),
+          );
+        },
         child: Text('+  Add Field Visitor', style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
       ),
     );
@@ -360,12 +368,12 @@ class ManagerDashboard extends StatelessWidget {
 
   // Removed old bar chart groups as spec requires a line chart.
 
-  Widget _buildRecentVisitorsList() {
+  Widget _buildRecentVisitorsList(BuildContext context) {
     final visitors = [
-      _visitorTile('Ram Kumar (AF 0252)', 'Farmer', '570Kg', 70),
-      _visitorTile('Prashvap (AF 0243)', 'Buyer', '360Kg', 45),
-      _visitorTile('Ransyo (AF 0244)', 'Farmer', '200Kg', 25),
-      _visitorTile('Balu kisnaman (AF 0156)', 'Buyer', '350Kg', 60),
+      _visitorTile(context, 'Ram Kumar (AF 0252)', 'Farmer', '570Kg', 70),
+      _visitorTile(context, 'Prashvap (AF 0243)', 'Buyer', '360Kg', 45),
+      _visitorTile(context, 'Ransyo (AF 0244)', 'Farmer', '200Kg', 25),
+      _visitorTile(context, 'Balu kisnaman (AF 0156)', 'Buyer', '350Kg', 60),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,8 +391,30 @@ class ManagerDashboard extends StatelessWidget {
     );
   }
 
-  Widget _visitorTile(String name, String type, String weight, int percent) {
-    return Container(
+  Widget _visitorTile(BuildContext context, String name, String type, String weight, int percent) {
+    return InkWell(
+      onTap: () {
+        final codeMatch = RegExp(r"\(([^)]+)\)").firstMatch(name);
+        final code = codeMatch != null ? codeMatch.group(1)! : 'k001';
+        const membersTarget = 150;
+        final membersCurrent = (percent * membersTarget / 100).round();
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => FieldVisitorProfileScreen(
+              name: name.split(' (').first,
+              code: code,
+              phone: '071 2345 678',
+              address: 'Jaffna,Srilanka',
+              email: 'ravimohan@gmail.com',
+              membersCurrent: membersCurrent,
+              membersTarget: membersTarget,
+              totalBuyRs: 250000,
+              totalSellRs: 150000,
+            ),
+          ),
+        );
+      },
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -434,20 +464,9 @@ class ManagerDashboard extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 
-  Widget _buildBottomNavBar() {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: AppColors.green,
-      unselectedItemColor: AppColors.grey,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.badge), label: 'Visitors'),
-        BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Reports'),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-      ],
-    );
-  }
+  // Footer moved to dedicated ManagerFooter widget (see lib/manager_footer.dart).
 }

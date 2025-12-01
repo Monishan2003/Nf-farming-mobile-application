@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'buy_sell.dart';
 import 'farmer_dashbort.dart';
 import '../app_colors.dart';
-import '../bottom_footer.dart';
+import '../field_footer.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() => runApp(const FarmerManagementApp(homeOverride: FieldVisitorDashboard()));
 
-class FieldVisitorDashboard extends StatefulWidget {
-  const FieldVisitorDashboard({super.key});
+class MambersList extends StatefulWidget {
+  const MambersList({super.key});
 
   @override
-  State<FieldVisitorDashboard> createState() => _FieldVisitorDashboardState();
+  State<MambersList> createState() => _MambersListState();
 }
 
-class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
+class _MambersListState extends State<MambersList> {
   final TextEditingController _searchCtrl = TextEditingController();
 
   final List<Map<String, dynamic>> _members = List.generate(12, (i) => {
@@ -182,7 +182,7 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
         ),
       ),
 
-      bottomNavigationBar: const AppFooter(),
+      bottomNavigationBar: const AppFooter(currentIndex: 1),
     );
   }
 
