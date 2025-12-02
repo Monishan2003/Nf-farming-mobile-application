@@ -5,6 +5,8 @@ import 'buy_sell.dart';
 import '../app_colors.dart';
 import 'field_visitor_profile.dart';
 import 'field_visitos_registation.dart';
+import 'field_visitors_list.dart';
+import '../visitor_store.dart';
 import '../manager_footer.dart';
 import '../session.dart';
 
@@ -162,23 +164,27 @@ class ManagerDashboard extends StatelessWidget {
   }
 
   Widget _buildVisitorsMembersCards() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth > 640;
-        // Field visitors: unique visitor codes from bill history
-        final visitorCodes = billHistory.map((b) => b.fieldVisitorCode).where((c) => c.isNotEmpty).toSet();
-        final visitorsCount = visitorCodes.length;
-        final membersCount = farmerStore.farmers.length;
-        final cards = [
-          _infoCard('Field Visitors', visitorsCount.toString(), Icons.badge),
-          _infoCard('All Members', membersCount.toString(), Icons.group),
-        ];
-        return Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: cards
-              .map((w) => SizedBox(width: isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth, child: w))
-              .toList(),
+    return AnimatedBuilder(
+      animation: visitorStore,
+      builder: (context, _) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            // Use the centralized visitorStore for the canonical visitor list
+            final visitorsCount = visitorStore.count;
+            final membersCountInt = farmerStore.farmers.length;
+            final isWide = constraints.maxWidth > 640;
+            final cards = [
+              _infoCard('Field Visitors', visitorsCount.toString(), Icons.badge),
+              _infoCard('All Members', '$membersCountInt', Icons.group),
+            ];
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: cards
+                  .map((w) => SizedBox(width: isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth, child: w))
+                  .toList(),
+            );
+          },
         );
       },
     );
@@ -210,6 +216,21 @@ class ManagerDashboard extends StatelessWidget {
   
 
   Widget _buildMonthlyAmountCards() {
+    // Compute current month totals (amounts) from central bill history
+    final now = DateTime.now();
+    final month = now.month;
+    final totalBuyAmount = billHistory
+        .where((b) => b.date.month == month && b.type == 'BUY')
+        .fold<double>(0.0, (p, e) => p + (e.total));
+    final totalSellAmount = billHistory
+        .where((b) => b.date.month == month && b.type == 'SELL')
+        .fold<double>(0.0, (p, e) => p + (e.total));
+
+    String fmtRs(double v) {
+      // Simple formatting: no decimals for whole-rupee display
+      return 'Rs ${v.toStringAsFixed(0)}';
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -220,13 +241,13 @@ class ManagerDashboard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('October Month Total Buy and Sell', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+          Text('${now.month}/${now.year} - Month Total (Rs)', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
           const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(child: _amountTile('Total Buy Amount', '₹ 10,000')),
+              Expanded(child: _amountTile('Total Buy Amount', fmtRs(totalBuyAmount))),
               const SizedBox(width: 12),
-              Expanded(child: _amountTile('Total Sell Amount', '₹ 20,000')),
+              Expanded(child: _amountTile('Total Sell Amount', fmtRs(totalSellAmount))),
             ],
           ),
         ],
@@ -380,28 +401,40 @@ class ManagerDashboard extends StatelessWidget {
   // Removed old bar chart groups as spec requires a line chart.
 
   Widget _buildRecentVisitorsList(BuildContext context) {
-    // Build recent visitors list from bill history (most recent field visitor codes)
-    final recentCodes = billHistory.reversed.map((b) => b.fieldVisitorCode).where((c) => c.isNotEmpty).toSet().take(6).toList();
-    final visitors = recentCodes.map((code) {
-      final visits = billHistory.where((b) => b.fieldVisitorCode == code).toList();
-      final totalKg = visits.fold<int>(0, (p, e) => p + e.quantity);
-      final percent = 0; // percent not easily computed here without targets
-      final displayName = code; // fallback to code
-      return _visitorTile(context, displayName, 'Visitor', '${totalKg}Kg', percent);
-    }).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // Show recent field visitors from the centralized VisitorStore.
+    return AnimatedBuilder(
+      animation: visitorStore,
+      builder: (context, _) {
+        final all = visitorStore.visitors.toList().reversed.toList();
+        final recent = all.take(6).toList();
+        final visitorWidgets = recent.map((v) {
+          final visits = billHistory.where((b) => b.fieldVisitorCode == v.code).toList();
+          final totalKg = visits.fold<int>(0, (p, e) => p + e.quantity);
+          // percent placeholder; could be computed against a target later
+          final percent = 0;
+          return _visitorTile(context, '${v.name} (${v.code})', 'Visitor', '${totalKg}Kg', percent);
+        }).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Field Visitors', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
-            TextButton(onPressed: () {}, child: const Text('See all')),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Field Visitors', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FieldVisitorsListScreen()));
+                  },
+                  child: const Text('See all'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...visitorWidgets.take(4),
           ],
-        ),
-        const SizedBox(height: 10),
-        ...visitors.take(4),
-      ],
+        );
+      },
     );
   }
 
@@ -411,7 +444,6 @@ class ManagerDashboard extends StatelessWidget {
         final codeMatch = RegExp(r"\(([^)]+)\)").firstMatch(name);
         final code = codeMatch != null ? codeMatch.group(1)! : 'k001';
         const membersTarget = 150;
-        final membersCurrent = (percent * membersTarget / 100).round();
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => FieldVisitorProfileScreen(
@@ -420,10 +452,7 @@ class ManagerDashboard extends StatelessWidget {
               phone: '071 2345 678',
               address: 'Jaffna,Srilanka',
               email: 'ravimohan@gmail.com',
-              membersCurrent: membersCurrent,
               membersTarget: membersTarget,
-              totalBuyRs: 250000,
-              totalSellRs: 150000,
             ),
           ),
         );

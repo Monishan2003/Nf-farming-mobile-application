@@ -34,6 +34,33 @@ class ManagerProfileScreen extends StatelessWidget {
               _navTile(context, Icons.group, 'Field visitors', onTap: () {
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FieldVisitorsListScreen()));
               }),
+              const SizedBox(height: 16),
+              _sectionTitle('Account'),
+              _navTile(
+                context,
+                Icons.logout,
+                'Logout',
+                onTap: () {
+                  showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Logout'),
+                      content: const Text('Are you sure you want to log out?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                        TextButton(
+                          onPressed: () {
+                            AppSession.clear();
+                            Navigator.of(ctx).pop();
+                            Navigator.of(ctx).pushNamedAndRemoveUntil('/login', (route) => false);
+                          },
+                          child: const Text('Logout'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),

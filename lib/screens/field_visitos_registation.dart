@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_colors.dart';
 import '../manager_footer.dart';
+import '../visitor_store.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() { runApp(const NatureFarmingApp()); }
@@ -425,6 +426,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     // For demo: do minimal validation and show success
     model.signature = tcSignature.text;
     model.signDate = DateTime.now();
+    // Add to central visitor store so dashboard updates live
+    try {
+      // create a simple visitor entry from the model
+      final id = DateTime.now().millisecondsSinceEpoch.toString();
+      final name = tcFullName.text.trim().isNotEmpty ? tcFullName.text.trim() : 'Unnamed';
+      final code = 'VF${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+      final address = tcPostal.text.trim().isNotEmpty ? tcPostal.text.trim() : (tcPermanent.text.trim().isNotEmpty ? tcPermanent.text.trim() : '');
+      visitorStore.addVisitor(Visitor(id: id, name: name, code: code, address: address));
+    } catch (_) {}
+
     _showSuccessPopup('Successfully Registered', 'Your application has been submitted successfully.', onOk: () {
       // reset or go to first
       setState(() {

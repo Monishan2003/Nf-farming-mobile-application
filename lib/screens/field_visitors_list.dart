@@ -4,6 +4,7 @@ import '../manager_footer.dart';
 import '../session.dart';
 import 'field_visitor_profile.dart';
 import 'field_visitos_registation.dart';
+import '../visitor_store.dart';
 
 class FieldVisitorsListScreen extends StatefulWidget {
   const FieldVisitorsListScreen({super.key});
@@ -15,25 +16,24 @@ class FieldVisitorsListScreen extends StatefulWidget {
 class _FieldVisitorsListScreenState extends State<FieldVisitorsListScreen> {
   final TextEditingController _search = TextEditingController();
 
-  final List<Map<String, String>> visitors = List.generate(10, (i) {
-    final name = i == 0 ? 'Ram Kumar' : 'Jhon Kunasingam';
-    final code = i == 0 ? 'AF 0252' : 'AF 034$i';
-    final address = i == 0 ? 'Jaffna, Srilanka' : 'Green Road, Trincomalee';
-    return {
-      'name': name,
-      'code': code,
-      'address': address,
-    };
-  });
+  @override
+  void initState() {
+    super.initState();
+    visitorStore.addListener(_onStoreChanged);
+  }
+
+  void _onStoreChanged() => setState(() {});
 
   List<Map<String, String>> get filtered {
     final q = _search.text.trim().toLowerCase();
-    if (q.isEmpty) return visitors;
-    return visitors.where((v) => (v['name'] ?? '').toLowerCase().contains(q)).toList();
+    final src = visitorStore.visitors.map((v) => {'name': v.name, 'code': v.code, 'address': v.address}).toList();
+    if (q.isEmpty) return src;
+    return src.where((v) => (v['name'] ?? '').toLowerCase().contains(q)).toList();
   }
 
   @override
   void dispose() {
+    visitorStore.removeListener(_onStoreChanged);
     _search.dispose();
     super.dispose();
   }
@@ -179,10 +179,6 @@ class _FieldVisitorsListScreenState extends State<FieldVisitorsListScreen> {
                       phone: '071 2345 678',
                       address: v['address'] ?? '',
                       email: 'manager@example.com',
-                      membersCurrent: 90,
-                      membersTarget: 150,
-                      totalBuyRs: 250000,
-                      totalSellRs: 150000,
                     ),
                   ),
                 );

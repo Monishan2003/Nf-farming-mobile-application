@@ -193,11 +193,11 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: _buildStatCard('Monthly Buy (Kg)', monthlyBuy.toString(), Colors.white),
+                      child: _buildStatCard('Monthly Buy (Rs)', monthlyBuy.toString(), Colors.white),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: _buildStatCard('Monthly Sell (Kg)', monthlySell.toString(), Colors.white),
+                      child: _buildStatCard('Monthly Sell (Rs)', monthlySell.toString(), Colors.white),
                     ),
                   ],
                 ),

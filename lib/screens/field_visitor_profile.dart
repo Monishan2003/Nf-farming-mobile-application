@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import '../app_colors.dart';
 import '../manager_footer.dart';
+import 'buy_sell.dart';
+import '../visitor_store.dart';
 
-class FieldVisitorProfileScreen extends StatelessWidget {
+class FieldVisitorProfileScreen extends StatefulWidget {
   final String name;
   final String code; // e.g., k001 / AF 0252
   final String phone;
   final String address;
   final String email;
-  final int membersCurrent;
   final int membersTarget;
-  final int totalBuyRs;
-  final int totalSellRs;
 
   const FieldVisitorProfileScreen({
     super.key,
@@ -20,13 +19,29 @@ class FieldVisitorProfileScreen extends StatelessWidget {
     required this.phone,
     required this.address,
     required this.email,
-    required this.membersCurrent,
-    required this.membersTarget,
-    required this.totalBuyRs,
-    required this.totalSellRs,
+    this.membersTarget = 150,
   });
 
-  double get progress => membersTarget == 0 ? 0 : membersCurrent / membersTarget;
+  @override
+  State<FieldVisitorProfileScreen> createState() => _FieldVisitorProfileScreenState();
+}
+
+class _FieldVisitorProfileScreenState extends State<FieldVisitorProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    farmerStore.addListener(_onChange);
+    visitorStore.addListener(_onChange);
+  }
+
+  void _onChange() => setState(() {});
+
+  @override
+  void dispose() {
+    farmerStore.removeListener(_onChange);
+    visitorStore.removeListener(_onChange);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +64,12 @@ class FieldVisitorProfileScreen extends StatelessWidget {
       ),
       bottomNavigationBar: const ManagerFooter(currentIndex: 1),
     );
+  }
+
+  double get progress {
+    final membersCurrent = _membersCurrent;
+    final target = widget.membersTarget == 0 ? 1 : widget.membersTarget;
+    return membersCurrent / target;
   }
 
   Widget _headerCard(BuildContext context) {
@@ -76,8 +97,8 @@ class FieldVisitorProfileScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '$name ($code)',
+                  Text(
+                    '${widget.name} (${widget.code})',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
@@ -130,49 +151,44 @@ class FieldVisitorProfileScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _detailsRow('Name', name),
-          _detailsRow('Mobile Number', phone),
-          _detailsRow('Address', address),
-          _detailsRow('Email', email),
+          _detailsRow('Name', widget.name),
+          _detailsRow('Mobile Number', widget.phone),
+          _detailsRow('Address', widget.address),
+          _detailsRow('Email', widget.email),
           const SizedBox(height: 8),
           const _SectionTitle(icon: Icons.bar_chart, title: 'Members'),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF2FBF5),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF2FBF5),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('$membersCurrent/$membersTarget', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                              Text('${(progress*100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(
-                              minHeight: 8,
-                              value: progress.clamp(0, 1),
-                              backgroundColor: Colors.white,
-                              valueColor: const AlwaysStoppedAnimation(AppColors.primaryGreen),
-                            ),
-                          ),
+                          Text('$_membersCurrent/${widget.membersTarget}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          Text('${(progress*100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                         ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          minHeight: 8,
+                          value: progress.clamp(0, 1),
+                          backgroundColor: Colors.white,
+                          valueColor: const AlwaysStoppedAnimation(AppColors.primaryGreen),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -186,7 +202,10 @@ class FieldVisitorProfileScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onPressed: () {},
+              onPressed: () {
+                // Intentionally left unconnected: members button does not
+                // navigate to the members list per requested behavior.
+              },
               child: const Text('members', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
             ),
           ),
@@ -221,13 +240,23 @@ class FieldVisitorProfileScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_rs(totalBuyRs), style: textGrey),
-              Text(_rs(totalSellRs), style: textGrey),
+              Text(_rs(_visitorTotals.buy), style: textGrey),
+              Text(_rs(_visitorTotals.sell), style: textGrey),
             ],
           ),
         ],
       ),
     );
+  }
+
+  int get _membersCurrent => farmerStore.farmers.where((f) => f.fieldVisitorCode == widget.code).length;
+
+  // Totals struct
+  _Totals get _visitorTotals {
+    final visits = billHistory.where((b) => b.fieldVisitorCode == widget.code).toList();
+    final buy = visits.where((b) => b.type == 'BUY').fold<double>(0.0, (p, e) => p + e.total).toInt();
+    final sell = visits.where((b) => b.type == 'SELL').fold<double>(0.0, (p, e) => p + e.total).toInt();
+    return _Totals(buy: buy, sell: sell);
   }
 
   String _rs(int v) {
@@ -259,4 +288,10 @@ class _SectionTitle extends StatelessWidget {
       ],
     );
   }
+}
+
+class _Totals {
+  final int buy;
+  final int sell;
+  _Totals({required this.buy, required this.sell});
 }

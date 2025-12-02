@@ -10,7 +10,9 @@ import 'field_visitor_my_profile.dart';
 // void main() => runApp(const FarmerManagementApp(homeOverride: FieldVisitorDashboard()));
 
 class MambersList extends StatefulWidget {
-  const MambersList({super.key});
+  final String? fieldVisitorCode;
+  final String? fieldVisitorName;
+  const MambersList({super.key, this.fieldVisitorCode, this.fieldVisitorName});
 
   @override
   State<MambersList> createState() => _MambersListState();
@@ -35,15 +37,18 @@ class _MambersListState extends State<MambersList> {
 
   List<Map<String, dynamic>> get _allMembers {
     try {
-      return farmerStore.farmers.map((f) => {
+      final list = farmerStore.farmers.map((f) => {
             'name': f.name,
             'location': f.address,
             'mobile': f.mobile,
             'nic': f.nic,
             'address': f.address,
             'billNumber': f.billNumber,
+            'fieldVisitorCode': f.fieldVisitorCode,
             'progress': 0.0,
           }).toList();
+      if (widget.fieldVisitorCode == null) return list;
+      return list.where((m) => (m['fieldVisitorCode'] as String?) == widget.fieldVisitorCode).toList();
     } catch (_) {
       return <Map<String, dynamic>>[];
     }
@@ -96,14 +101,14 @@ class _MambersListState extends State<MambersList> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text("Welcome ,",
-                        style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
                     SizedBox(height: 4),
                         InkWell(
                           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FieldVisitorMyProfileScreen())),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('${AppSession.displayFieldName} 👋',
+                              Text(widget.fieldVisitorName != null ? '${widget.fieldVisitorName} 👋' : '${AppSession.displayFieldName} 👋',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 22,
