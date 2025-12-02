@@ -22,6 +22,15 @@ class AppSession {
     fieldPhone = phone;
   }
 
+  static void clear() {
+    role = null;
+    managerName = null;
+    managerCode = null;
+    fieldName = null;
+    fieldCode = null;
+    fieldPhone = null;
+  }
+
   static String get displayFieldName => fieldName ?? 'Field Visitor';
   static String get displayFieldCode => fieldCode ?? 'k001';
   static String get displayFieldPhone => fieldPhone ?? 'N/A';

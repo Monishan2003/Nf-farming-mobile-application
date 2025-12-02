@@ -657,6 +657,21 @@ class _ResidentsScreenState extends State<ResidentsScreen> {
     super.dispose();
   }
 
+  Future<void> _pickDob() async {
+    final now = DateTime.now();
+    final initial = DateTime(now.year - 25, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: now,
+    );
+    if (picked != null) {
+      // store in ISO format so parsing is simple later
+      dob.text = '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    }
+  }
+
   void _next() {
     if (!_formKey.currentState!.validate()) return;
 
@@ -711,10 +726,49 @@ class _ResidentsScreenState extends State<ResidentsScreen> {
                       TextFormField(controller: nic, decoration: formDecoration(hint: 'N.I.C Number', prefixIcon: Icons.badge), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: mobile, decoration: formDecoration(hint: '+94 77 123 4567', prefixIcon: Icons.phone), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
+                      TextFormField(
+                        controller: mobile,
+                        decoration: formDecoration(hint: '+94 77 123 4567', prefixIcon: Icons.phone),
+                        keyboardType: TextInputType.phone,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Required';
+                          final s = v.replaceAll(RegExp(r'\s+'), '');
+                          if (!(s.startsWith('+94') || s.startsWith('07') || s.startsWith('7'))) return 'Enter valid Sri Lanka number';
+                          return null;
+                        },
+                      ),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: dob, decoration: formDecoration(hint: 'Date of birth', prefixIcon: Icons.calendar_month), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
+                      TextFormField(
+                        controller: dob,
+                        readOnly: true,
+                        decoration: formDecoration(hint: 'Date of birth (YYYY-MM-DD)', prefixIcon: Icons.calendar_month),
+                        onTap: _pickDob,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Required';
+                          // try ISO parse first
+                          DateTime? parsed = DateTime.tryParse(v.trim());
+                          if (parsed == null) {
+                            // try common dd/MM/yyyy or dd-MM-yyyy
+                            final parts = v.trim().split(RegExp(r'[\/\-]'));
+                            if (parts.length == 3) {
+                              try {
+                                final d = int.parse(parts[0]);
+                                final m = int.parse(parts[1]);
+                                final y = int.parse(parts[2]);
+                                parsed = DateTime(y, m, d);
+                              } catch (_) {
+                                return 'Enter valid date';
+                              }
+                            } else {
+                              return 'Enter valid date';
+                            }
+                          }
+                          final now = DateTime.now();
+                          if (parsed.isAfter(now)) return 'Date of birth cannot be in the future';
+                          return null;
+                        },
+                      ),
                       const SizedBox(height: 10),
 
                       TextFormField(controller: occupation, decoration: formDecoration(hint: 'Occupation', prefixIcon: Icons.work)),
@@ -831,10 +885,25 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
                     children: [
                       const Align(alignment: Alignment.centerLeft, child: Text('Business Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
                       const SizedBox(height: 8),
-                      TextFormField(controller: landSize, decoration: formDecoration(hint: 'Total land scale', prefixIcon: Icons.landscape)),
+                      TextFormField(
+                        controller: landSize,
+                        decoration: formDecoration(hint: 'Total land scale', prefixIcon: Icons.landscape),
+                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]'))],
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Required';
+                          final cleaned = v.replaceAll(',', '').trim();
+                          if (double.tryParse(cleaned) == null) return 'Enter valid number';
+                          return null;
+                        },
+                      ),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: activity, decoration: formDecoration(hint: 'Allocated land size / Activity', prefixIcon: Icons.work)),
+                      TextFormField(
+                        controller: activity,
+                        decoration: formDecoration(hint: 'Allocated land size / Activity', prefixIcon: Icons.work),
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
                       const SizedBox(height: 10),
 
                       TextFormField(controller: waterFacility, decoration: formDecoration(hint: 'Water facility', prefixIcon: Icons.water)),
@@ -846,7 +915,17 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
                       TextFormField(controller: machinery, decoration: formDecoration(hint: 'Machinery/Equipment', prefixIcon: Icons.precision_manufacturing)),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: quantityPlants, decoration: formDecoration(hint: 'Quantity of plants', prefixIcon: Icons.grass)),
+                      TextFormField(
+                        controller: quantityPlants,
+                        decoration: formDecoration(hint: 'Quantity of plants', prefixIcon: Icons.grass),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return null; // optional
+                          if (int.tryParse(v.trim()) == null) return 'Enter whole number';
+                          return null;
+                        },
+                      ),
                       const SizedBox(height: 14),
 
                       Row(
@@ -913,12 +992,29 @@ class FinalStepScreen extends StatelessWidget {
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(backgroundColor: AppColors.buttonGreen),
                           onPressed: () {
-                            // Build a Farmer entry and add to global store so member lists update automatically
+                            // Validate essential fields before creating the Farmer
                             final id = DateTime.now().millisecondsSinceEpoch.toString();
-                            final name = (registrationData['fullName'] ?? registrationData['resident_fullName'] ?? '').toString();
-                            final mobile = (registrationData['mobile'] ?? registrationData['resident_mobile'] ?? '').toString();
-                            final address = (registrationData['location'] ?? '').toString();
-                            final nic = (registrationData['nic'] ?? registrationData['resident_nic'] ?? '').toString();
+                            final name = (registrationData['fullName'] ?? registrationData['resident_fullName'] ?? '').toString().trim();
+                            final mobile = (registrationData['mobile'] ?? registrationData['resident_mobile'] ?? '').toString().trim();
+                            final address = (registrationData['location'] ?? '').toString().trim();
+                            final nic = (registrationData['nic'] ?? registrationData['resident_nic'] ?? '').toString().trim();
+
+                            if (name.isEmpty) {
+                              showDialog(context: ctx, builder: (d) => AlertDialog(title: const Text('Missing name'), content: const Text('Please provide the member full name.'), actions: [TextButton(onPressed: () => Navigator.of(d).pop(), child: const Text('OK'))]));
+                              return;
+                            }
+                            if (mobile.isEmpty) {
+                              showDialog(context: ctx, builder: (d) => AlertDialog(title: const Text('Missing mobile'), content: const Text('Please provide a mobile number.'), actions: [TextButton(onPressed: () => Navigator.of(d).pop(), child: const Text('OK'))]));
+                              return;
+                            }
+
+                            // simple mobile normalization check
+                            final s = mobile.replaceAll(RegExp(r'\s+'), '');
+                            if (!(s.startsWith('+94') || s.startsWith('07') || s.startsWith('7'))) {
+                              showDialog(context: ctx, builder: (d) => AlertDialog(title: const Text('Invalid mobile'), content: const Text('Enter a valid Sri Lanka mobile number.'), actions: [TextButton(onPressed: () => Navigator.of(d).pop(), child: const Text('OK'))]));
+                              return;
+                            }
+
                             final billNo = 'B${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
                             try {
                               final f = Farmer(id: id, name: name.isEmpty ? 'Unnamed' : name, phone: '', address: address, mobile: mobile, nic: nic, billNumber: billNo, fieldVisitorCode: AppSession.displayFieldCode);
