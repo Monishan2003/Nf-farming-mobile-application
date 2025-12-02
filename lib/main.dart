@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/login_page.dart';
 import 'screens/manager_dashboard.dart';
 import 'screens/field_visitor_dashboard.dart';
+import 'screens/notifications_screen.dart';
 import 'screens/member_registation.dart' show WelcomeFormScreen;
 import 'app_colors.dart';
 
@@ -71,6 +72,7 @@ class MyApp extends StatelessWidget {
         '/manager': (_) => const ManagerDashboard(),
         '/registration': (_) => const WelcomeFormScreen(),
         '/field_dashboard': (_) => const FieldVisitorDashboard(),
+        '/notifications': (_) => const NotificationsScreen(),
       },
     );
   }

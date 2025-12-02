@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'bill_detail_screen.dart';
+import '../notifications.dart';
 import '../session.dart';
 
 // Central bill history for reporting
@@ -47,7 +48,7 @@ class Farmer {
 
 class FarmerStore extends ChangeNotifier {
   final List<Farmer> _farmers = [
-    Farmer(id: '1', name: 'Salman', phone: '03250', address: 'Jaffna', mobile: '0717233478', nic: '4001', billNumber: 'B001', fieldVisitorCode: '', totalBuy: 10000.0, totalSell: 20000.0),
+    Farmer(id: '1', name: 'Salman', phone: '03250', address: 'Jaffna', mobile: '0717233478', nic: '4001', billNumber: 'B001', fieldVisitorCode: '', totalBuy: 0.0, totalSell: 0.0),
     Farmer(id: '2', name: 'Ram kumar', phone: '0712345678', address: 'Jaffna,Srilanka', mobile: '071234678', nic: '1001', billNumber: 'B002', fieldVisitorCode: '', totalBuy: 0.0, totalSell: 0.0),
   ];
 
@@ -503,9 +504,22 @@ class _BuyingScreenState extends State<BuyingScreen> {
                 );
                 // Save to central bill history for reporting
                 billHistory.add(detail);
+                // Add a notification entry for UI visibility
+                notificationStore.addNotification(NotificationEntry(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  title: 'New ${detail.type} Bill: ${detail.billNo}',
+                  body: '${detail.memberName} - ${detail.total.toStringAsFixed(2)}',
+                  date: DateTime.now(),
+                  billData: detail,
+                ));
+                // Show the bill detail screen first (user can download PDF),
+                // then open the Notifications screen so the user sees the message.
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
                 );
+                // After viewing the bill, show the Notifications screen (guard against disposed context)
+                if (!mounted) return;
+                await Navigator.of(context).pushNamed('/notifications');
                 if (mounted) widget.onFinished?.call();
               },
               style: ElevatedButton.styleFrom(
@@ -785,9 +799,19 @@ class _SellingScreenState extends State<SellingScreen> {
                 );
                 // Save to central bill history for reporting
                 billHistory.add(detail);
+                // Add a notification entry for UI visibility
+                notificationStore.addNotification(NotificationEntry(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  title: 'New ${detail.type} Bill: ${detail.billNo}',
+                  body: '${detail.memberName} - ${detail.total.toStringAsFixed(2)}',
+                  date: DateTime.now(),
+                  billData: detail,
+                ));
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
                 );
+                if (!mounted) return;
+                await Navigator.of(context).pushNamed('/notifications');
                 if (mounted) widget.onFinished?.call();
               },
               style: ElevatedButton.styleFrom(
