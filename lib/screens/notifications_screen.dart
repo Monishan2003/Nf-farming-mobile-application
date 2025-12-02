@@ -6,7 +6,7 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = <Map<String, String>>[]; // placeholder list
+    final items = <Map<String, String>>[];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notifications'),

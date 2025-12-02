@@ -7,6 +7,7 @@ import '../app_colors.dart';
 import '../field_footer.dart';
 import 'memberlist.dart';
 import 'buy_sell.dart';
+import '../session.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() { runApp(const NatureFarmingApp()); }
@@ -920,7 +921,7 @@ class FinalStepScreen extends StatelessWidget {
                             final nic = (registrationData['nic'] ?? registrationData['resident_nic'] ?? '').toString();
                             final billNo = 'B${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
                             try {
-                              final f = Farmer(id: id, name: name.isEmpty ? 'Unnamed' : name, phone: '', address: address, mobile: mobile, nic: nic, billNumber: billNo);
+                              final f = Farmer(id: id, name: name.isEmpty ? 'Unnamed' : name, phone: '', address: address, mobile: mobile, nic: nic, billNumber: billNo, fieldVisitorCode: AppSession.displayFieldCode);
                               farmerStore.addFarmer(f);
                             } catch (_) {}
 

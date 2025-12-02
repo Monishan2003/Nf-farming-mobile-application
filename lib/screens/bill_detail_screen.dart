@@ -20,6 +20,7 @@ class BillDetailData {
   final double total;
   final String fieldVisitorName;
   final String fieldVisitorPhone;
+  final String fieldVisitorCode;
   final String? companyName;
   final String? companyAddress;
   final String? companyPhone;
@@ -38,6 +39,7 @@ class BillDetailData {
     required this.total,
     required this.fieldVisitorName,
     required this.fieldVisitorPhone,
+    required this.fieldVisitorCode,
     this.companyName,
     this.companyAddress,
     this.companyPhone,

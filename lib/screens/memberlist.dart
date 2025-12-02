@@ -299,6 +299,7 @@ class _MambersListState extends State<MambersList> {
             mobile: m['mobile'] ?? '',
             nic: m['nic'] ?? '',
             billNumber: m['billNumber'] ?? '',
+            fieldVisitorCode: AppSession.displayFieldCode,
           );
           farmerStore.addFarmer(f);
           farmerStore.selectFarmer(f);

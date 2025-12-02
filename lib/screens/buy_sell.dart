@@ -12,6 +12,9 @@ import 'package:printing/printing.dart';
 import 'bill_detail_screen.dart';
 import '../session.dart';
 
+// Central bill history for reporting
+final List<BillDetailData> billHistory = [];
+
 // Simple in-memory model to make future DB integration easy.
 class Farmer {
   final String id;
@@ -21,6 +24,7 @@ class Farmer {
   String mobile;
   String nic;
   String billNumber;
+  String fieldVisitorCode;
   double totalBuy;
   double totalSell;
 
@@ -31,6 +35,7 @@ class Farmer {
     required this.address,
     required this.mobile,
     required this.nic,
+    this.fieldVisitorCode = '',
     this.billNumber = '',
     this.totalBuy = 0.0,
     this.totalSell = 0.0,
@@ -42,8 +47,8 @@ class Farmer {
 
 class FarmerStore extends ChangeNotifier {
   final List<Farmer> _farmers = [
-    Farmer(id: '1', name: 'Salman', phone: '03250', address: 'Jaffna', mobile: '0717233478', nic: '4001', billNumber: 'B001', totalBuy: 10000.0, totalSell: 20000.0),
-    Farmer(id: '2', name: 'Ram kumar', phone: '0712345678', address: 'Jaffna,Srilanka', mobile: '071234678', nic: '1001', billNumber: 'B002', totalBuy: 0.0, totalSell: 0.0),
+    Farmer(id: '1', name: 'Salman', phone: '03250', address: 'Jaffna', mobile: '0717233478', nic: '4001', billNumber: 'B001', fieldVisitorCode: '', totalBuy: 10000.0, totalSell: 20000.0),
+    Farmer(id: '2', name: 'Ram kumar', phone: '0712345678', address: 'Jaffna,Srilanka', mobile: '071234678', nic: '1001', billNumber: 'B002', fieldVisitorCode: '', totalBuy: 0.0, totalSell: 0.0),
   ];
 
   String _query = '';
@@ -83,7 +88,7 @@ class FarmerStore extends ChangeNotifier {
       return;
     } catch (_) {
       final id = DateTime.now().millisecondsSinceEpoch.toString();
-      final f = Farmer(id: id, name: name, phone: '', address: '', mobile: '', nic: '', billNumber: '');
+      final f = Farmer(id: id, name: name, phone: '', address: '', mobile: '', nic: '', billNumber: '', fieldVisitorCode: AppSession.displayFieldCode);
       _farmers.add(f);
       selectFarmer(f);
       notifyListeners();
@@ -493,8 +498,11 @@ class _BuyingScreenState extends State<BuyingScreen> {
                   total: amount,
                   fieldVisitorName: AppSession.displayFieldName,
                   fieldVisitorPhone: AppSession.displayFieldPhone,
+                  fieldVisitorCode: AppSession.displayFieldCode,
                   companyName: 'Nature Farming',
                 );
+                // Save to central bill history for reporting
+                billHistory.add(detail);
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
                 );
@@ -772,8 +780,11 @@ class _SellingScreenState extends State<SellingScreen> {
                   total: amount,
                   fieldVisitorName: AppSession.displayFieldName,
                   fieldVisitorPhone: AppSession.displayFieldPhone,
+                  fieldVisitorCode: AppSession.displayFieldCode,
                   companyName: 'Nature Farming',
                 );
+                // Save to central bill history for reporting
+                billHistory.add(detail);
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
                 );

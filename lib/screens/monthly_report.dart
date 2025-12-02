@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../app_colors.dart';
 import '../manager_footer.dart';
+import 'buy_sell.dart';
 import 'package:pdf/pdf.dart' as pw;
 import 'package:pdf/widgets.dart' as pww;
 import 'package:printing/printing.dart';
@@ -48,11 +49,16 @@ class MonthlyReportScreen extends StatelessWidget {
   }
 
   Widget _summaryCards() {
+    // Compute totals from central bill history
+    final now = DateTime.now();
+    final month = now.month;
+    final totalBuy = billHistory.where((b) => b.date.month == month && b.type == 'BUY').fold<int>(0, (p, e) => p + e.quantity);
+    final totalSell = billHistory.where((b) => b.date.month == month && b.type == 'SELL').fold<int>(0, (p, e) => p + e.quantity);
     return Row(
       children: [
-        Expanded(child: _statCard('Total Buy (KG)', '3,420')),
+        Expanded(child: _statCard('Total Buy (KG)', totalBuy.toString())),
         const SizedBox(width: 12),
-        Expanded(child: _statCard('Total Sell (KG)', '2,950')),
+        Expanded(child: _statCard('Total Sell (KG)', totalSell.toString())),
       ],
     );
   }
@@ -78,8 +84,9 @@ class MonthlyReportScreen extends StatelessWidget {
   }
 
   Widget _barChart() {
-    const buys = [20, 25, 22, 30, 35, 40, 42, 50, 54, 60, 68, 72];
-    const sells = [28, 30, 32, 35, 40, 45, 48, 55, 58, 62, 70, 75];
+    // Build monthly buys/sells from bill history (quantity assumed to be KG)
+    final buys = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'BUY').fold<int>(0, (p, e) => p + e.quantity));
+    final sells = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'SELL').fold<int>(0, (p, e) => p + e.quantity));
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     final maxValue = [...buys, ...sells].reduce((a, b) => a > b ? a : b);
     return Container(
@@ -144,8 +151,8 @@ class MonthlyReportScreen extends StatelessWidget {
 
   Widget _monthlyBreakdown() {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const buys = [20, 25, 22, 30, 35, 40, 42, 50, 54, 60, 68, 72];
-    const sells = [28, 30, 32, 35, 40, 45, 48, 55, 58, 62, 70, 75];
+    final buys = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'BUY').fold<int>(0, (p, e) => p + e.quantity));
+    final sells = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'SELL').fold<int>(0, (p, e) => p + e.quantity));
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
@@ -193,8 +200,8 @@ class _LegendDot extends StatelessWidget {
 
 Future<List<int>> _buildPdf() async {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const buys = [20, 25, 22, 30, 35, 40, 42, 50, 54, 60, 68, 72];
-  const sells = [28, 30, 32, 35, 40, 45, 48, 55, 58, 62, 70, 75];
+  final buys = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'BUY').fold<int>(0, (p, e) => p + e.quantity));
+  final sells = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'SELL').fold<int>(0, (p, e) => p + e.quantity));
   final doc = pww.Document();
   doc.addPage(
     pww.MultiPage(
@@ -209,8 +216,8 @@ Future<List<int>> _buildPdf() async {
         pww.SizedBox(height: 12),
         pww.Text('Summary', style: pww.TextStyle(fontSize: 16, fontWeight: pww.FontWeight.bold)),
         pww.SizedBox(height: 4),
-        pww.Bullet(text: 'Total Buy (KG): ${buys.reduce((a,b)=>a+b)}'),
-        pww.Bullet(text: 'Total Sell (KG): ${sells.reduce((a,b)=>a+b)}'),
+        pww.Bullet(text: 'Total Buy (KG): ${buys.isNotEmpty ? buys.reduce((a,b)=>a+b) : 0}'),
+        pww.Bullet(text: 'Total Sell (KG): ${sells.isNotEmpty ? sells.reduce((a,b)=>a+b) : 0}'),
       ],
     ),
   );

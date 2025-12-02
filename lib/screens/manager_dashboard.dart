@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'buy_sell.dart';
 import '../app_colors.dart';
 import 'field_visitor_profile.dart';
 import 'field_visitos_registation.dart';
@@ -116,13 +117,18 @@ class ManagerDashboard extends StatelessWidget {
     );
   }
 
-   Widget _buildTopCards() {
+  Widget _buildTopCards() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 640;
+        // Compute totals from billHistory for the current month
+        final now = DateTime.now();
+        final month = now.month;
+        final totalBuy = billHistory.where((b) => b.date.month == month && b.type == 'BUY').fold<int>(0, (p, e) => p + e.quantity);
+        final totalSell = billHistory.where((b) => b.date.month == month && b.type == 'SELL').fold<int>(0, (p, e) => p + e.quantity);
         final items = [
-          _statCard('Monthly Buy (KG)', '3,420'),
-          _statCard('Monthly Sell (KG)', '2,950'),
+          _statCard('Monthly Buy (KG)', totalBuy.toString()),
+          _statCard('Monthly Sell (KG)', totalSell.toString()),
         ];
         return Wrap(
           spacing: 12,
@@ -159,9 +165,13 @@ class ManagerDashboard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 640;
+        // Field visitors: unique visitor codes from bill history
+        final visitorCodes = billHistory.map((b) => b.fieldVisitorCode).where((c) => c.isNotEmpty).toSet();
+        final visitorsCount = visitorCodes.length;
+        final membersCount = farmerStore.farmers.length;
         final cards = [
-          _infoCard('Field Visitors', '124', Icons.badge),
-          _infoCard('All Members', '3,250', Icons.group),
+          _infoCard('Field Visitors', visitorsCount.toString(), Icons.badge),
+          _infoCard('All Members', membersCount.toString(), Icons.group),
         ];
         return Wrap(
           spacing: 12,
@@ -271,10 +281,11 @@ class ManagerDashboard extends StatelessWidget {
   }
 
   Widget _buildMonthlyTrendBarChart() {
-    const buys = [20, 25, 22, 30, 35, 40, 42, 50, 54, 60, 68, 72];
-    const sells = [28, 30, 32, 35, 40, 45, 48, 55, 58, 62, 70, 75];
+    // Build monthly buys/sells from central bill history
+    final buys = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'BUY').fold<int>(0, (p, e) => p + e.quantity));
+    final sells = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'SELL').fold<int>(0, (p, e) => p + e.quantity));
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final maxValue = [...buys, ...sells].reduce((a, b) => a > b ? a : b);
+    final maxValue = [...buys, ...sells].isNotEmpty ? [...buys, ...sells].reduce((a, b) => a > b ? a : b) : 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -369,12 +380,15 @@ class ManagerDashboard extends StatelessWidget {
   // Removed old bar chart groups as spec requires a line chart.
 
   Widget _buildRecentVisitorsList(BuildContext context) {
-    final visitors = [
-      _visitorTile(context, 'Ram Kumar (AF 0252)', 'Farmer', '570Kg', 70),
-      _visitorTile(context, 'Prashvap (AF 0243)', 'Buyer', '360Kg', 45),
-      _visitorTile(context, 'Ransyo (AF 0244)', 'Farmer', '200Kg', 25),
-      _visitorTile(context, 'Balu kisnaman (AF 0156)', 'Buyer', '350Kg', 60),
-    ];
+    // Build recent visitors list from bill history (most recent field visitor codes)
+    final recentCodes = billHistory.reversed.map((b) => b.fieldVisitorCode).where((c) => c.isNotEmpty).toSet().take(6).toList();
+    final visitors = recentCodes.map((code) {
+      final visits = billHistory.where((b) => b.fieldVisitorCode == code).toList();
+      final totalKg = visits.fold<int>(0, (p, e) => p + e.quantity);
+      final percent = 0; // percent not easily computed here without targets
+      final displayName = code; // fallback to code
+      return _visitorTile(context, displayName, 'Visitor', '${totalKg}Kg', percent);
+    }).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

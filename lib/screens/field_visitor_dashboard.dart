@@ -263,34 +263,49 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
 
               const SizedBox(height: 16),
 
-              // Pie Charts Row
+              // Pie Charts Row — show current-month totals and this field visitor's participation (KG from bill history)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildPieChartCard(
-                        'Total Buy',
-                        '10,000 KG',
-                        [
-                          {'label': 'Local Buyer', 'value': 0.6, 'color': const Color(0xFF90EE90)},
-                          {'label': 'Distributors', 'value': 0.4, 'color': const Color(0xFF228B22)},
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildPieChartCard(
-                        'Total Sell',
-                        '20,000 BS',
-                        [
-                          {'label': 'Export Buyer', 'value': 0.7, 'color': const Color(0xFFFF6B6B)},
-                          {'label': 'Direct Export', 'value': 0.3, 'color': const Color(0xFFDC143C)},
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                child: Builder(builder: (context) {
+                  // Compute totals from billHistory (quantity treated as KG)
+                  final now = DateTime.now();
+                  final month = now.month;
+                  final totalBuy = billHistory.where((b) => b.date.month == month && b.type == 'BUY').fold<double>(0.0, (p, e) => p + e.quantity.toDouble());
+                  final totalSell = billHistory.where((b) => b.date.month == month && b.type == 'SELL').fold<double>(0.0, (p, e) => p + e.quantity.toDouble());
+                  final visitorCode = AppSession.displayFieldCode;
+                  final visitorBuy = billHistory.where((b) => b.date.month == month && b.type == 'BUY' && b.fieldVisitorCode == visitorCode).fold<double>(0.0, (p, e) => p + e.quantity.toDouble());
+                  final visitorSell = billHistory.where((b) => b.date.month == month && b.type == 'SELL' && b.fieldVisitorCode == visitorCode).fold<double>(0.0, (p, e) => p + e.quantity.toDouble());
+                  final restBuy = (totalBuy - visitorBuy).clamp(0.0, double.infinity);
+                  final restSell = (totalSell - visitorSell).clamp(0.0, double.infinity);
+
+                  final buyData = totalBuy > 0
+                      ? [
+                          {'label': 'This Visitor', 'value': visitorBuy / totalBuy, 'amount': visitorBuy, 'color': const Color(0xFF90EE90)},
+                          {'label': 'Others', 'value': restBuy / totalBuy, 'amount': restBuy, 'color': const Color(0xFF228B22)},
+                        ]
+                      : [
+                          {'label': 'This Visitor', 'value': 0.5, 'amount': 0.0, 'color': const Color(0xFF90EE90)},
+                          {'label': 'Others', 'value': 0.5, 'amount': 0.0, 'color': const Color(0xFF228B22)},
+                        ];
+
+                  final sellData = totalSell > 0
+                      ? [
+                          {'label': 'This Visitor', 'value': visitorSell / totalSell, 'amount': visitorSell, 'color': const Color(0xFFFF6B6B)},
+                          {'label': 'Others', 'value': restSell / totalSell, 'amount': restSell, 'color': const Color(0xFFDC143C)},
+                        ]
+                      : [
+                          {'label': 'This Visitor', 'value': 0.5, 'amount': 0.0, 'color': const Color(0xFFFF6B6B)},
+                          {'label': 'Others', 'value': 0.5, 'amount': 0.0, 'color': const Color(0xFFDC143C)},
+                        ];
+
+                  return Row(
+                    children: [
+                      Expanded(child: _buildPieChartCard('Buy (This Month)', '${totalBuy.toInt()} KG', buyData)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildPieChartCard('Sell (This Month)', '${totalSell.toInt()} KG', sellData)),
+                    ],
+                  );
+                }),
               ),
 
               const SizedBox(height: 16),
@@ -427,27 +442,28 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
             ),
           ),
           const SizedBox(height: 12),
-          ...data.map((item) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: item['color'],
-                        shape: BoxShape.circle,
-                      ),
+          ...data.map((item) {
+            final amt = (item['amount'] is num) ? (item['amount'] as num).toInt() : null;
+            final label = amt != null ? '${item['label']} — $amt Kg' : item['label'];
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: item['color'],
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      item['label'],
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              )),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                ],
+              ),
+            );
+          }),
           const SizedBox(height: 8),
           Text(
             'Total $title Amount',
