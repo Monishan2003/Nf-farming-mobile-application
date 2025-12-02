@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_colors.dart';
 import '../field_footer.dart';
+import 'memberlist.dart';
+import 'buy_sell.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() { runApp(const NatureFarmingApp()); }
@@ -906,18 +908,30 @@ class FinalStepScreen extends StatelessWidget {
                     child: OutlinedButton(onPressed: () => Navigator.of(c).pop(), child: const Text('Back')),
                   ),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.buttonGreen),
-                      onPressed: () {
-                        Navigator.of(c).pop();
-                        showSuccessDialog(ctx, 'Successfully Registered', 'Your request is registered and currently in process. We will notify you...', onOk: () {
-                          Navigator.of(ctx).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const RegistrationCompleteScreen()), (r) => false);
-                        });
-                      },
-                      child: const Text('Submit'),
-                    ),
-                  ),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.buttonGreen),
+                          onPressed: () {
+                            // Build a Farmer entry and add to global store so member lists update automatically
+                            final id = DateTime.now().millisecondsSinceEpoch.toString();
+                            final name = (registrationData['fullName'] ?? registrationData['resident_fullName'] ?? '').toString();
+                            final mobile = (registrationData['mobile'] ?? registrationData['resident_mobile'] ?? '').toString();
+                            final address = (registrationData['location'] ?? '').toString();
+                            final nic = (registrationData['nic'] ?? registrationData['resident_nic'] ?? '').toString();
+                            final billNo = 'B${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+                            try {
+                              final f = Farmer(id: id, name: name.isEmpty ? 'Unnamed' : name, phone: '', address: address, mobile: mobile, nic: nic, billNumber: billNo);
+                              farmerStore.addFarmer(f);
+                            } catch (_) {}
+
+                            Navigator.of(c).pop();
+                            showSuccessDialog(ctx, 'Successfully Registered', 'Your request is registered and added to members.', onOk: () {
+                              Navigator.of(ctx).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const MambersList()), (r) => false);
+                            });
+                          },
+                          child: const Text('Submit'),
+                        ),
+                      ),
                 ],
               ),
             ],

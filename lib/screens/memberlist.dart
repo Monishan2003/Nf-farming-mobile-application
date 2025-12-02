@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'buy_sell.dart';
-import 'farmer_dashbort.dart';
+import 'member_registation.dart';
 import '../app_colors.dart';
 import '../field_footer.dart';
+import '../session.dart';
+import 'field_visitor_my_profile.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() => runApp(const FarmerManagementApp(homeOverride: FieldVisitorDashboard()));
@@ -17,34 +19,63 @@ class MambersList extends StatefulWidget {
 class _MambersListState extends State<MambersList> {
   final TextEditingController _searchCtrl = TextEditingController();
 
-  final List<Map<String, dynamic>> _members = List.generate(12, (i) => {
-        'name': 'Member ${i + 1}',
-        'location': ['Green Road', 'River Bank', 'Hill Side', 'Lake View'][i % 4],
-        'mobile': '0717${(100000 + i).toString().padLeft(6, '0')}',
-        'nic': 'NIC${1000 + i}',
-        'address': '${['Green Road', 'River Bank', 'Hill Side', 'Lake View'][i % 4]}, District',
-        'billNumber': 'B${100 + i}',
-        'progress': ((i + 1) * 7 % 100) / 100.0,
-      });
+  // Local/sample members removed — member list is driven by `farmerStore`.
 
   List<Map<String, dynamic>> get _filteredMembers {
     final q = _searchCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return _members; // show full list by default
-    return _members.where((m) => (m['name'] as String).toLowerCase().contains(q)).toList();
+    final all = _allMembers;
+    if (q.isEmpty) return all; // show full list by default
+    return all.where((m) {
+      final name = (m['name'] as String).toLowerCase();
+      final mobile = (m['mobile'] as String?) ?? '';
+      final bill = (m['billNumber'] as String?) ?? '';
+      return name.contains(q) || mobile.toLowerCase().contains(q) || bill.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> get _allMembers {
+    try {
+      return farmerStore.farmers.map((f) => {
+            'name': f.name,
+            'location': f.address,
+            'mobile': f.mobile,
+            'nic': f.nic,
+            'address': f.address,
+            'billNumber': f.billNumber,
+            'progress': 0.0,
+          }).toList();
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
   }
 
   @override
   void dispose() {
+    farmerStore.removeListener(_onStoreChanged);
     _searchCtrl.dispose();
     super.dispose();
   }
 
   @override
+  void initState() {
+    super.initState();
+    farmerStore.addListener(_onStoreChanged);
+  }
+
+  void _onStoreChanged() => setState(() {});
+
+  @override
   Widget build(BuildContext context) {
-    // Field visitor target values
+    // Field visitor target values (include registered members from farmerStore)
     final int target = 150;
-    final int addedCount = _members.length;
+    final int registeredMembers = farmerStore.farmers.length;
+    final int addedCount = registeredMembers;
     final double targetPct = (addedCount / target).clamp(0.0, 1.0);
+
+    // Totals for header: total members (source = member list), monthly buy/sell sums
+    final int totalMembers = _allMembers.length;
+    final double monthlyBuy = farmerStore.totalBuyAll;
+    final double monthlySell = farmerStore.totalSellAll;
     return Scaffold(
       backgroundColor: const Color(0xFFE8F7EE), // light green (same as Figma)
       body: SafeArea(
@@ -67,14 +98,22 @@ class _MambersListState extends State<MambersList> {
                     Text("Welcome ,",
                         style: TextStyle(color: Colors.white70, fontSize: 14)),
                     SizedBox(height: 4),
-                    Text(
-                      "Field visitor Name 👋",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                        InkWell(
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FieldVisitorMyProfileScreen())),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${AppSession.displayFieldName} 👋',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  )),
+                              const SizedBox(height: 4),
+                              Text(AppSession.displayFieldPhone, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            ],
+                          ),
+                        ),
                     SizedBox(height: 2),
                     Text(
                       "Field Visitor Dashboard",
@@ -137,6 +176,43 @@ class _MambersListState extends State<MambersList> {
                           ),
                         ],
                       ),
+                    ),
+
+                    const SizedBox(height: 12),
+                    // Summary stats: total members and aggregated buy/sell
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Total Members', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text('$totalMembers', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Monthly Buy', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text('${monthlyBuy.toInt()} Kg', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Monthly Sell', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text('${monthlySell.toInt()} Kg', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
 
                     // reduced vertical spacing to make the header more compact

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import '../session.dart';
 import 'buy_sell.dart';
-import 'farmer_dashbort.dart';
+import 'member_registation.dart';
 import '../app_colors.dart';
 import '../field_footer.dart';
+import 'field_visitor_my_profile.dart';
+import 'memberlist.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() => runApp(const FarmerManagementApp(homeOverride: FieldVisitorDashboard()));
@@ -17,64 +20,50 @@ class FieldVisitorDashboard extends StatefulWidget {
 class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
   final TextEditingController _searchCtrl = TextEditingController();
 
-  final List<Map<String, dynamic>> _members = [
-    {
-      'name': 'Riyaz Ahd (029)',
-      'location': 'Vavuniya',
-      'mobile': '0717100000',
-      'nic': 'NIC1000',
-      'address': 'Vavuniya, District',
-      'billNumber': 'B100',
-      'lastSeen': 'Last Seen 12-05',
-    },
-    {
-      'name': 'Prashasy Isuruje Aek (043)',
-      'location': 'Negombo',
-      'mobile': '0717100001',
-      'nic': 'NIC1001',
-      'address': 'Negombo, District',
-      'billNumber': 'B101',
-      'lastSeen': 'Last Seen 15-06',
-    },
-    {
-      'name': 'Malika Peiyadurai Bob (066)',
-      'location': 'Negombo',
-      'mobile': '0717100002',
-      'nic': 'NIC1002',
-      'address': 'Negombo, District',
-      'billNumber': 'B102',
-      'lastSeen': 'M8821 2020 205',
-    },
-    {
-      'name': 'Lal Prasaji Bhali (018)',
-      'location': 'Negombo',
-      'mobile': '0717100003',
-      'nic': 'NIC1003',
-      'address': 'Negombo, District',
-      'billNumber': 'B103',
-      'lastSeen': 'Last Seen 20-12',
-    },
-  ];
-
+  // Members are sourced from the shared `farmerStore`; remove local sample members.
   List<Map<String, dynamic>> get _filteredMembers {
     final q = _searchCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return _members;
-    return _members.where((m) => (m['name'] as String).toLowerCase().contains(q)).toList();
+    final all = farmerStore.farmers.map((f) => {
+          'name': f.name,
+          'location': f.address,
+          'mobile': f.mobile,
+          'nic': f.nic,
+          'address': f.address,
+          'billNumber': f.billNumber,
+          'lastSeen': '',
+        }).toList();
+    if (q.isEmpty) return all;
+    return all
+        .where((m) => (m['name'] as String).toLowerCase().contains(q) || (m['mobile'] as String).toLowerCase().contains(q) || (m['billNumber'] as String).toLowerCase().contains(q))
+        .toList();
   }
 
   @override
   void dispose() {
+    farmerStore.removeListener(_onStoreChanged);
     _searchCtrl.dispose();
     super.dispose();
   }
 
   @override
+  void initState() {
+    super.initState();
+    farmerStore.addListener(_onStoreChanged);
+  }
+
+  void _onStoreChanged() => setState(() {});
+
+  @override
   Widget build(BuildContext context) {
-    final int myMembers = 150;
-    final int reminders = 5;
-    final int monthlyBuy = 3420;
-    final int monthlySell = 2950;
-    final double targetProgress = 0.50;
+    // Dynamic counts: use registered members from farmerStore only
+    final int registeredMembers = farmerStore.farmers.length;
+    final int myMembers = registeredMembers;
+    final int reminders = 0;
+    // Use farmerStore totals so values update when members record buy/sell are changed
+    final double monthlyBuy = farmerStore.totalBuyAll;
+    final double monthlySell = farmerStore.totalSellAll;
+    const int target = 150; // keep same target baseline
+    final double targetProgress = (myMembers / target).clamp(0.0, 1.0);
 
     return Scaffold(
       backgroundColor: const Color(0xFFE8F7EE),
@@ -119,10 +108,28 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
                             ),
                           ],
                         ),
-                        const CircleAvatar(
-                          radius: 20,
-                          backgroundColor: Colors.orange,
-                          child: Icon(Icons.person, color: Colors.white),
+                        InkWell(
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FieldVisitorMyProfileScreen())),
+                          child: Row(
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(AppSession.displayFieldName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 2),
+                                  Text(AppSession.displayFieldCode, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                  const SizedBox(height: 2),
+                                  Text(AppSession.displayFieldPhone, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                ],
+                              ),
+                              const SizedBox(width: 8),
+                              const CircleAvatar(
+                                radius: 20,
+                                backgroundColor: Colors.orange,
+                                child: Icon(Icons.person, color: Colors.white),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -154,6 +161,8 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    
                   ],
                 ),
               ),
@@ -239,6 +248,14 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
                           valueColor: const AlwaysStoppedAnimation(Colors.green),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '$myMembers of $target added (${(targetProgress * 100).toInt()}%)',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -307,13 +324,16 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
               const SizedBox(height: 20),
 
               // My Members Section
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'My Members',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: InkWell(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MambersList())),
+                  child: Text(
+                    'My Members — ${AppSession.displayFieldName} (${AppSession.displayFieldCode})',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
