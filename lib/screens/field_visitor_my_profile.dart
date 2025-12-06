@@ -21,6 +21,9 @@ class FieldVisitorMyProfileScreen extends StatelessWidget {
               _topBar(context),
               _profileHeader(),
               const SizedBox(height: 16),
+              _sectionTitle('Languages'),
+              _navTile(context, Icons.language, 'Select Languages', onTap: () => _showLanguagesDialog(context)),
+              const SizedBox(height: 16),
               _sectionTitle('Settings'),
               _navTile(context, Icons.settings, 'Preferences', onTap: () => _todo(context)),
               _navTile(context, Icons.person_outline, 'Account', onTap: () => _todo(context)),
@@ -136,5 +139,30 @@ class FieldVisitorMyProfileScreen extends StatelessWidget {
 
   void _todo(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coming soon')));
+  }
+
+  void _showLanguagesDialog(BuildContext context) {
+    final languages = ['English', 'Tamil', 'Sinhala'];
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select Languages'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: languages.length,
+            itemBuilder: (context, index) {
+              return ListTile(
+                title: Text(languages[index]),
+                onTap: () {
+                  Navigator.of(ctx).pop(languages[index]);
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
   }
 }

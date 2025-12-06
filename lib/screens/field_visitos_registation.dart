@@ -3,6 +3,10 @@ import 'dart:ui';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
+import '../notifications.dart';
 import '../app_colors.dart';
 import '../manager_footer.dart';
 import '../visitor_store.dart';
@@ -274,7 +278,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   String generatedEmailOtp = '';
 
   // declaration
-  final tcSignature = TextEditingController();
+  bool _acceptedDeclaration = false;
 
 
   PageController pageController = PageController();
@@ -290,7 +294,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     tcHome.dispose();
     tcEmail.dispose();
     tcNIC.dispose();
-    tcSignature.dispose();
     for (var c in otpControllers) {
       c.dispose();
     }
@@ -476,10 +479,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  void _submitApplication({VoidCallback? onOkOverride}) {
+  Future<void> _submitApplication({VoidCallback? onOkOverride}) async {
     // For demo: do minimal validation and show success
-    model.signature = tcSignature.text;
-    model.signDate = DateTime.now();
+    model.signature = _acceptedDeclaration ? 'Accepted' : '';
+    model.signDate ??= DateTime.now();
     // Add to central visitor store so dashboard updates live
     try {
       // create a simple visitor entry from the model
@@ -488,6 +491,22 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final code = 'VF${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
       final address = tcPostal.text.trim().isNotEmpty ? tcPostal.text.trim() : (tcPermanent.text.trim().isNotEmpty ? tcPermanent.text.trim() : '');
       visitorStore.addVisitor(Visitor(id: id, name: name, code: code, address: address));
+      // Build registration PDF and add a notification with the PDF attached
+      try {
+        final pdfBytes = await _buildRegistrationPdfBytes();
+          notificationStore.addNotification(NotificationEntry(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: 'Registration Complete: $name',
+          body: 'Field visitor registration completed. Tap to view/download PDF.',
+          date: DateTime.now(),
+          pdfData: pdfBytes,
+          pdfFileName: 'Registration_${name.replaceAll(' ', '_')}_$id.pdf',
+        ));
+      } catch (e) {
+        // ignore pdf attach errors but log
+        // ignore: avoid_print
+        print('Failed to attach registration PDF: $e');
+      }
     } catch (_) {}
     _showSuccessPopup('Successfully Registered', 'Your application has been submitted successfully.', onOk: () {
       if (onOkOverride != null) {
@@ -676,9 +695,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           const Text(
               'I agree to any salary / allowance being remitted to Bank A/C. I hereby certify that particulars furnished by me in this application are true and accurate. If any particulars are found incorrect I am liable to be disqualified.'),
           const SizedBox(height: 10),
-          TextField(
-            controller: tcSignature,
-            decoration: const InputDecoration(labelText: 'Signature', border: OutlineInputBorder(), isDense: true),
+          CheckboxListTile(
+            value: _acceptedDeclaration,
+            onChanged: (v) => setState(() => _acceptedDeclaration = v ?? false),
+            title: const Text('I agree to the declaration above'),
+            controlAffinity: ListTileControlAffinity.leading,
           ),
           const SizedBox(height: 8),
           Row(children: [
@@ -900,15 +921,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             decoration: BoxDecoration(color: Colors.white, border: Border.all(color: AppColors.borderGrey), borderRadius: BorderRadius.circular(8)),
             padding: const EdgeInsets.all(12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Name: ${tcFullName.text}'),
-              const SizedBox(height: 6),
-              Text('Mobile: ${tcMobile.text}'),
-              const SizedBox(height: 6),
-              Text('Email: ${tcEmail.text}'),
-              const SizedBox(height: 6),
-              Text('NIC: ${tcNIC.text}'),
+              // Summary rows generated from registration data
+              ..._buildSummaryRows(),
               const SizedBox(height: 12),
               const Text('References:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
               ...model.references.map((r) => Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text('${r['name']} - ${r['contact']}'))),
             ]),
           ),
@@ -917,20 +934,170 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             _previousButton(() => goToStep(3)),
-            ElevatedButton(
-              onPressed: () {
-                // Confirm & submit directly from review screen
-                _submitApplication(onOkOverride: () {
-                  // After success popup closes, navigate to Field Visitors list
-                  Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const FieldVisitorsListScreen()));
-                });
-              },
-              child: const Text('Confirm & Submit'),
-            ),
+            Row(children: [
+              ElevatedButton(
+                onPressed: _exportSummaryPdf,
+                child: const Text('Export PDF'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () async {
+                  // Require declaration acceptance before submit
+                  if (!_acceptedDeclaration) {
+                    await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+                      title: const Text('Declaration Required'),
+                      content: const Text('You must accept the declaration before submitting the application.'),
+                      actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+                    ));
+                    return;
+                  }
+
+                  // show confirmation dialog before final submit
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Confirm Submission'),
+                      content: const Text('Are you sure you want to submit this application? Please review the details before confirming.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                        ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Confirm')),
+                      ],
+                    ),
+                  );
+
+                  if (ok == true) {
+                    _submitApplication(onOkOverride: () {
+                      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const FieldVisitorsListScreen()));
+                    });
+                  }
+                },
+                child: const Text('Confirm & Submit'),
+              ),
+            ]),
           ])
         ]),
       ),
     );
+  }
+
+  // Collect key registration fields into a map for summary display
+  Map<String, String> _collectRegistrationData() {
+    final Map<String, String> data = {};
+    data['Application For'] = tcApplicationFor.text.trim();
+    data['Branch'] = tcBranch.text.trim();
+    data['Full Name'] = tcFullName.text.trim();
+    data['Postal Address'] = tcPostal.text.trim();
+    data['Permanent Address'] = tcPermanent.text.trim();
+    data['Mobile'] = tcMobile.text.trim();
+    data['Home Phone'] = tcHome.text.trim();
+    data['Email'] = tcEmail.text.trim();
+    data['NIC'] = tcNIC.text.trim();
+    data['Gender'] = model.gender;
+    data['Civil Status'] = model.civilStatus;
+    data['Date of Birth'] = model.dob == null ? '' : model.dob!.toLocal().toString().split(' ').first;
+    data['EPF No'] = model.epfNo;
+    data['Present Employer'] = model.presentEmployer;
+    data['Designation'] = model.designation;
+    // Education summaries
+    final ol = model.olevel.where((r) => (r['sub']?.trim().isNotEmpty ?? false) || (r['grade']?.trim().isNotEmpty ?? false)).map((r) => '${r['sub'] ?? ''}${(r['grade'] ?? '').isNotEmpty ? ' (${r['grade']})' : ''}').toList();
+    final al = model.alevel.where((r) => (r['sub']?.trim().isNotEmpty ?? false) || (r['grade']?.trim().isNotEmpty ?? false)).map((r) => '${r['sub'] ?? ''}${(r['grade'] ?? '').isNotEmpty ? ' (${r['grade']})' : ''}').toList();
+    if (ol.isNotEmpty) data['O/L Subjects'] = ol.join(', ');
+    if (al.isNotEmpty) data['A/L Subjects'] = al.join(', ');
+    final others = model.otherQualifications.where((s) => s.trim().isNotEmpty).toList();
+    if (others.isNotEmpty) data['Other Qualifications'] = others.join(', ');
+
+    // Previous experience
+    final prev = model.prevExp.where((e) => (e['company']?.trim().isNotEmpty ?? false) || (e['designation']?.trim().isNotEmpty ?? false)).map((e) => '${e['company'] ?? ''}${(e['designation'] ?? '').isNotEmpty ? ' - ${e['designation']}' : ''}${(e['period'] ?? '').isNotEmpty ? ' (${e['period']})' : ''}').toList();
+    if (prev.isNotEmpty) data['Previous Experience'] = prev.join(' ; ');
+
+    // References
+    final refs = model.references.where((r) => (r['name']?.trim().isNotEmpty ?? false)).map((r) => '${r['name'] ?? ''}${(r['contact'] ?? '').isNotEmpty ? ' (${r['contact']})' : ''}').toList();
+    if (refs.isNotEmpty) data['References'] = refs.join(' ; ');
+
+    // Activities
+    final acts = model.activities.where((s) => s.trim().isNotEmpty).toList();
+    if (acts.isNotEmpty) data['Activities'] = acts.join(', ');
+
+    // Bank / additional
+    data['Convicted'] = model.convicted ? 'Yes' : 'No';
+    if (model.bank.isNotEmpty) data['Bank'] = model.bank;
+    if (model.branchName.isNotEmpty) data['Bank Branch'] = model.branchName;
+    if (model.accountNo.isNotEmpty) data['Account No'] = model.accountNo;
+
+    // Declaration
+    data['Declaration Accepted'] = _acceptedDeclaration ? 'Yes' : 'No';
+    data['Signed On'] = model.signDate == null ? '' : model.signDate!.toLocal().toString().split(' ').first;
+
+    return data;
+  }
+
+  // Build summary rows from collected registration data
+  List<Widget> _buildSummaryRows() {
+    final registrationData = _collectRegistrationData();
+    final entries = registrationData.entries.toList();
+    return entries
+        .map((e) {
+          // Render list-like keys as multi-line blocks
+          const listKeys = {'O/L Subjects', 'A/L Subjects', 'Other Qualifications', 'Previous Experience', 'References', 'Activities'};
+          final isListKey = listKeys.contains(e.key);
+          Widget valueWidget;
+            if (isListKey && e.value.toString().trim().isNotEmpty) {
+            // split by separators used in _collectRegistrationData
+            final parts = e.value.toString().split(RegExp(r', | ; '));
+            valueWidget = Column(crossAxisAlignment: CrossAxisAlignment.start, children: parts.map((p) => Text('- ${p.trim()}')).toList());
+          } else {
+            valueWidget = Text(e.value.toString());
+          }
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(flex: 3, child: Text(e.key, style: const TextStyle(fontWeight: FontWeight.w600))),
+              const SizedBox(width: 8),
+              Expanded(flex: 5, child: valueWidget),
+            ]),
+          );
+        }).toList();
+  }
+
+  // Export current summary to PDF and open print/share dialog
+  Future<void> _exportSummaryPdf() async {
+    try {
+      final bytes = await _buildRegistrationPdfBytes();
+      await Printing.layoutPdf(onLayout: (format) async => bytes);
+    } catch (e) {
+      _showSnack('Failed to generate PDF: $e');
+    }
+  }
+
+  Future<Uint8List> _buildRegistrationPdfBytes() async {
+    final doc = pw.Document();
+    final registrationData = _collectRegistrationData();
+    final entries = registrationData.entries.toList();
+
+    // Styles
+    final keyStyle = pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold);
+    final valStyle = pw.TextStyle(fontSize: 10);
+
+    doc.addPage(pw.MultiPage(pageFormat: PdfPageFormat.a4, margin: const pw.EdgeInsets.all(24), build: (ctx) {
+      return [
+        pw.Container(padding: const pw.EdgeInsets.only(bottom: 8), child: pw.Text('Field Visitor Registration Summary', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold))),
+        pw.SizedBox(height: 6),
+        // Use a table-like layout for key/value pairs
+        pw.Column(children: entries.map((e) {
+          if (e.value.toString().trim().isEmpty) return pw.SizedBox();
+          final listKeys = {'O/L Subjects', 'A/L Subjects', 'Other Qualifications', 'Previous Experience', 'References', 'Activities'};
+          if (listKeys.contains(e.key)) {
+            final parts = e.value.toString().split(RegExp(r', | ; ')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+            return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [pw.Text(e.key, style: keyStyle), pw.SizedBox(height: 4), pw.Column(children: parts.map((p) => pw.Row(children: [pw.Text('• ', style: valStyle), pw.Expanded(child: pw.Text(p, style: valStyle))])).toList()), pw.SizedBox(height: 8)]);
+          }
+          return pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 6), child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [pw.Expanded(flex: 3, child: pw.Text(e.key, style: keyStyle)), pw.SizedBox(width: 8), pw.Expanded(flex: 5, child: pw.Text(e.value.toString(), style: valStyle))]));
+        }).toList())
+      ];
+    }));
+
+    return Uint8List.fromList(await doc.save());
   }
 
   // _submitScreen removed — confirmation now happens on the review screen

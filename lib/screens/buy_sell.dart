@@ -404,6 +404,8 @@ class _BuyingScreenState extends State<BuyingScreen> {
   final TextEditingController _countController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   String _selectedProduct = 'Alo Vera Small (Packet)';
+  String _selectedUnit = 'number';
+  final List<String> _unitOptions = const ['Kg', 'g', 'number'];
 
   @override
   Widget build(BuildContext context) {
@@ -431,7 +433,7 @@ class _BuyingScreenState extends State<BuyingScreen> {
               DropdownButton<String>(
                 value: _selectedProduct,
                 items: const [
-                  DropdownMenuItem(value: 'Alo Vera leaf', child: Text('Alo Vera leaf')),
+                  DropdownMenuItem(value: 'Alo Vera leaf(g / Kg)', child: Text('Alo Vera leaf')),
                   DropdownMenuItem(value: 'Alo Vera Small (Packet)', child: Text('Alo Vera Small (Packet)')),
                   DropdownMenuItem(value: 'Alo Vera Small', child: Text('Alo Vera Small')),
                 ],
@@ -469,7 +471,7 @@ class _BuyingScreenState extends State<BuyingScreen> {
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   DetailRow(label: _selectedProduct, value: ''),
-                  DetailRow(label: 'Count', value: _countController.text),
+                  DetailRow(label: 'Count', value: '${_countController.text} $_selectedUnit'),
                   DetailRow(label: 'Current Price', value: _priceController.text),
                   DetailRow(label: 'total price', value: _computeTotal()),
                 ],
@@ -594,18 +596,67 @@ class _BuyingScreenState extends State<BuyingScreen> {
             const SizedBox(height: 12),
             Column(
               children: [
-                TextField(
-                  controller: _countController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Count', border: OutlineInputBorder()),
-                  onChanged: (_) => setState(() {}),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _countController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Count',
+                          border: OutlineInputBorder(),
+                          errorText: null,
+                        ),
+                        onChanged: (value) {
+                          // Only allow integers
+                          if (value.isNotEmpty && int.tryParse(value) == null) {
+                            _countController.text = value.substring(0, value.length - 1);
+                            _countController.selection = TextSelection.fromPosition(
+                              TextPosition(offset: _countController.text.length),
+                            );
+                          }
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedUnit,
+                        decoration: const InputDecoration(
+                          labelText: 'Unit',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _unitOptions
+                            .map((u) => DropdownMenuItem<String>(value: u, child: Text(u)))
+                            .toList(),
+                        onChanged: (v) => setState(() => _selectedUnit = v!),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _priceController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Current Price', hintText: 'Enter the current price', border: OutlineInputBorder()),
-                  onChanged: (_) => setState(() {}),
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Current Price (Rs)',
+                    hintText: 'Enter price in Sri Lankan Rupees',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    // Only allow integers for Sri Lankan Rs
+                    if (value.isNotEmpty && int.tryParse(value) == null) {
+                      _priceController.text = value.substring(0, value.length - 1);
+                      _priceController.selection = TextSelection.fromPosition(
+                        TextPosition(offset: _priceController.text.length),
+                      );
+                    }
+                    setState(() {});
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -645,9 +696,9 @@ class _BuyingScreenState extends State<BuyingScreen> {
 
   String _computeTotal() {
     final count = int.tryParse(_countController.text.replaceAll(',', '')) ?? 0;
-    final price = double.tryParse(_priceController.text.replaceAll(',', '')) ?? 0.0;
+    final price = int.tryParse(_priceController.text.replaceAll(',', '')) ?? 0;
     final total = count * price;
-    return total.toStringAsFixed(2);
+    return total.toString();
   }
 
   @override
@@ -671,6 +722,8 @@ class _SellingScreenState extends State<SellingScreen> {
   final TextEditingController _weightController = TextEditingController();
   final TextEditingController _sellPriceController = TextEditingController();
   String _selectedSellProduct = 'Alo Vera leaf';
+  String _selectedWeightUnit = 'Kg';
+  final List<String> _unitOptions = const ['Kg', 'g', 'number'];
 
   @override
   Widget build(BuildContext context) {
@@ -719,18 +772,66 @@ class _SellingScreenState extends State<SellingScreen> {
                 Text(_selectedSellProduct, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
                 // color applied via surrounding theme or AppColors where needed
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _weightController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'weight', border: OutlineInputBorder()),
-                  onChanged: (_) => setState(() {}),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _weightController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'count',
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (value) {
+                          // Only allow integers
+                          if (value.isNotEmpty && int.tryParse(value) == null) {
+                            _weightController.text = value.substring(0, value.length - 1);
+                            _weightController.selection = TextSelection.fromPosition(
+                              TextPosition(offset: _weightController.text.length),
+                            );
+                          }
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedWeightUnit,
+                        decoration: const InputDecoration(
+                          labelText: 'Unit',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _unitOptions
+                            .map((u) => DropdownMenuItem<String>(value: u, child: Text(u)))
+                            .toList(),
+                        onChanged: (v) => setState(() => _selectedWeightUnit = v!),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _sellPriceController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Current Price', border: OutlineInputBorder()),
-                  onChanged: (_) => setState(() {}),
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Current Price (Rs)',
+                    hintText: 'Enter price in Sri Lankan Rupees',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    // Only allow integers for Sri Lankan Rs
+                    if (value.isNotEmpty && int.tryParse(value) == null) {
+                      _sellPriceController.text = value.substring(0, value.length - 1);
+                      _sellPriceController.selection = TextSelection.fromPosition(
+                        TextPosition(offset: _sellPriceController.text.length),
+                      );
+                    }
+                    setState(() {});
+                  },
                 ),
                 const SizedBox(height: 12),
                 DetailRow(label: 'total price', value: _computeSellTotal()),
@@ -765,7 +866,7 @@ class _SellingScreenState extends State<SellingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DetailRow(label: _selectedSellProduct, value: ''),
-                DetailRow(label: 'weight', value: _weightController.text),
+                DetailRow(label: 'count', value: '${_weightController.text} $_selectedWeightUnit'),
                 DetailRow(label: 'Current Price', value: _sellPriceController.text),
                 DetailRow(label: 'total price', value: _computeSellTotal()),
               ],
@@ -788,7 +889,7 @@ class _SellingScreenState extends State<SellingScreen> {
                   memberPhone: f?.mobile ?? '0717234478',
                   memberAddress: f?.address ?? 'Jaffna,Srilanka',
                   product: _selectedSellProduct,
-                  quantityLabel: 'Weight',
+                  quantityLabel: 'count',
                   quantity: int.tryParse(_weightController.text) ?? 0,
                   unitPrice: double.tryParse(_sellPriceController.text) ?? 0.0,
                   total: amount,
@@ -874,8 +975,8 @@ class _SellingScreenState extends State<SellingScreen> {
 
   String _computeSellTotal() {
     final qty = int.tryParse(_weightController.text.replaceAll(',', '')) ?? 0;
-    final price = double.tryParse(_sellPriceController.text.replaceAll(',', '')) ?? 0.0;
-    return (qty * price).toStringAsFixed(2);
+    final price = int.tryParse(_sellPriceController.text.replaceAll(',', '')) ?? 0;
+    return (qty * price).toString();
   }
 
   @override

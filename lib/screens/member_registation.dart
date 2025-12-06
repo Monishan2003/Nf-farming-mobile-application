@@ -3,8 +3,11 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../app_colors.dart';
 import '../field_footer.dart';
+import '../notifications.dart';
 import 'memberlist.dart';
 import 'buy_sell.dart';
 import '../session.dart';
@@ -626,7 +629,19 @@ class _ResidentsScreenState extends State<ResidentsScreen> {
   final TextEditingController mobile = TextEditingController();
   final TextEditingController dob = TextEditingController();
   final TextEditingController occupation = TextEditingController();
-  final TextEditingController education = TextEditingController();
+
+  String? educationSelection;
+  final List<String> educationOptions = const [
+    'Primary Education: Grades 1 to 5',
+    'Junior Secondary: Grades 6 to 9',
+    'Ordinary Level (O/L)',
+    'Advanced Level (A/L)',
+    'Diploma',
+    "Bachelor's (General)",
+    "Bachelor's (Honours)",
+    "Master's",
+    'Doctoral',
+  ];
 
   @override
   void initState() {
@@ -643,7 +658,6 @@ class _ResidentsScreenState extends State<ResidentsScreen> {
     mobile.dispose();
     dob.dispose();
     occupation.dispose();
-    education.dispose();
     super.dispose();
   }
 
@@ -671,7 +685,7 @@ class _ResidentsScreenState extends State<ResidentsScreen> {
       'resident_mobile': mobile.text.trim(),
       'resident_dob': dob.text.trim(),
       'resident_occupation': occupation.text.trim(),
-      'resident_education': education.text.trim(),
+      'resident_education': educationSelection ?? '',
     };
 
     final merged = {...widget.registrationData, ...residentsData};
@@ -713,12 +727,7 @@ class _ResidentsScreenState extends State<ResidentsScreen> {
                       TextFormField(controller: fullName, decoration: formDecoration(hint: 'Full Name', prefixIcon: Icons.person), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: nic, decoration: formDecoration(hint: 'N.I.C Number', prefixIcon: Icons.badge), validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Required';
-                        if (!_isValidNic(v)) return 'Enter valid NIC';
-                        return null;
-                      }),
-                      const SizedBox(height: 10),
+                      // NIC field removed per request
 
                       TextFormField(
                         controller: mobile,
@@ -767,7 +776,22 @@ class _ResidentsScreenState extends State<ResidentsScreen> {
                       TextFormField(controller: occupation, decoration: formDecoration(hint: 'Occupation', prefixIcon: Icons.work)),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: education, decoration: formDecoration(hint: 'Education Level', prefixIcon: Icons.school)),
+                      DropdownButtonFormField<String>(
+                        initialValue: educationSelection,
+                        decoration: formDecoration(hint: 'Education level', prefixIcon: Icons.school),
+                        items: educationOptions
+                            .map((v) => DropdownMenuItem<String>(value: v, child: Text(v)))
+                            .toList(),
+                        onChanged: (v) => setState(() => educationSelection = v),
+                        validator: (v) => (v == null || v.isEmpty) ? 'Select education level' : null,
+                      ),
+                      if (educationSelection != null) ...[
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('Selected: $educationSelection', style: const TextStyle(fontSize: 12, color: AppColors.greyText)),
+                        ),
+                      ],
                       const SizedBox(height: 14),
 
                       Row(
@@ -815,18 +839,18 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController landSize = TextEditingController();
   final TextEditingController activity = TextEditingController();
-  final TextEditingController waterFacility = TextEditingController();
-  final TextEditingController electricity = TextEditingController();
-  final TextEditingController machinery = TextEditingController();
   final TextEditingController quantityPlants = TextEditingController();
+
+  String? waterFacilitySelection;
+  String? electricitySelection;
+  String? machinerySelection;
+
+  final List<String> yesNoOptions = const ['Yes', 'No'];
 
   @override
   void dispose() {
     landSize.dispose();
     activity.dispose();
-    waterFacility.dispose();
-    electricity.dispose();
-    machinery.dispose();
     quantityPlants.dispose();
     super.dispose();
   }
@@ -837,9 +861,9 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
     final businessData = {
       'landSize': landSize.text.trim(),
       'activity': activity.text.trim(),
-      'waterFacility': waterFacility.text.trim(),
-      'electricity': electricity.text.trim(),
-      'machinery': machinery.text.trim(),
+      'waterFacility': waterFacilitySelection ?? '',
+      'electricity': electricitySelection ?? '',
+      'machinery': machinerySelection ?? '',
       'quantityPlants': quantityPlants.text.trim(),
     };
 
@@ -880,7 +904,7 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: landSize,
-                        decoration: formDecoration(hint: 'Total land scale', prefixIcon: Icons.landscape),
+                        decoration: formDecoration(hint: 'Total land scale (acres)', prefixIcon: Icons.landscape),
                         keyboardType: TextInputType.numberWithOptions(decimal: true),
                         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]'))],
                         validator: (v) {
@@ -894,23 +918,47 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
 
                       TextFormField(
                         controller: activity,
-                        decoration: formDecoration(hint: 'Allocated land size / Activity', prefixIcon: Icons.work),
+                        decoration: formDecoration(hint: 'Allocated land size / Activity (acres)', prefixIcon: Icons.work),
                         validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                       ),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: waterFacility, decoration: formDecoration(hint: 'Water facility', prefixIcon: Icons.water)),
+                      DropdownButtonFormField<String>(
+                        initialValue: waterFacilitySelection,
+                        decoration: formDecoration(hint: 'Water facility', prefixIcon: Icons.water),
+                        items: yesNoOptions
+                            .map((v) => DropdownMenuItem<String>(value: v, child: Text(v)))
+                            .toList(),
+                        onChanged: (v) => setState(() => waterFacilitySelection = v),
+                        validator: (v) => (v == null || v.isEmpty) ? 'Select Yes or No' : null,
+                      ),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: electricity, decoration: formDecoration(hint: 'Electricity facility', prefixIcon: Icons.electrical_services)),
+                      DropdownButtonFormField<String>(
+                        initialValue: electricitySelection,
+                        decoration: formDecoration(hint: 'Electricity facility', prefixIcon: Icons.electrical_services),
+                        items: yesNoOptions
+                            .map((v) => DropdownMenuItem<String>(value: v, child: Text(v)))
+                            .toList(),
+                        onChanged: (v) => setState(() => electricitySelection = v),
+                        validator: (v) => (v == null || v.isEmpty) ? 'Select Yes or No' : null,
+                      ),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: machinery, decoration: formDecoration(hint: 'Machinery/Equipment', prefixIcon: Icons.precision_manufacturing)),
+                      DropdownButtonFormField<String>(
+                        initialValue: machinerySelection,
+                        decoration: formDecoration(hint: 'Machinery/Equipment', prefixIcon: Icons.precision_manufacturing),
+                        items: yesNoOptions
+                            .map((v) => DropdownMenuItem<String>(value: v, child: Text(v)))
+                            .toList(),
+                        onChanged: (v) => setState(() => machinerySelection = v),
+                        validator: (v) => (v == null || v.isEmpty) ? 'Select Yes or No' : null,
+                      ),
                       const SizedBox(height: 10),
 
                       TextFormField(
                         controller: quantityPlants,
-                        decoration: formDecoration(hint: 'Quantity of plants', prefixIcon: Icons.grass),
+                        decoration: formDecoration(hint: 'Quantity of plants (number)', prefixIcon: Icons.grass),
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         validator: (v) {
@@ -958,6 +1006,56 @@ class FinalStepScreen extends StatelessWidget {
   final Map<String, dynamic> registrationData;
   const FinalStepScreen({super.key, required this.registrationData});
 
+  Map<String, String> _buildSummaryData() {
+    final Map<String, String> data = {};
+    registrationData.forEach((k, v) {
+      if (v == null) return;
+      data[k.toString()] = v.toString();
+    });
+    return data;
+  }
+
+  Future<Uint8List> _buildPdfBytes() async {
+    final doc = pw.Document();
+    final keyStyle = pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold);
+    final valStyle = pw.TextStyle(fontSize: 10);
+    final entries = _buildSummaryData().entries.toList();
+
+    doc.addPage(pw.MultiPage(
+      build: (ctx) => [
+        pw.Text('Member Registration Summary', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 8),
+        pw.Column(
+          children: entries
+              .map((e) => pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                    child: pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Expanded(flex: 3, child: pw.Text(e.key, style: keyStyle)),
+                        pw.SizedBox(width: 8),
+                        pw.Expanded(flex: 5, child: pw.Text(e.value, style: valStyle)),
+                      ],
+                    ),
+                  ))
+              .toList(),
+        ),
+      ],
+    ));
+
+    return Uint8List.fromList(await doc.save());
+  }
+
+  Future<void> _exportPdf(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final bytes = await _buildPdfBytes();
+      await Printing.layoutPdf(onLayout: (format) async => bytes);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Failed to generate PDF: $e')));
+    }
+  }
+
   void _confirm(BuildContext ctx) {
     showDialog(
       context: ctx,
@@ -984,7 +1082,9 @@ class FinalStepScreen extends StatelessWidget {
                       Expanded(
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(backgroundColor: AppColors.buttonGreen),
-                          onPressed: () {
+                          onPressed: () async {
+                            final nav = Navigator.of(ctx);
+                            final messenger = ScaffoldMessenger.of(ctx);
                             // Validate essential fields before creating the Farmer
                             final id = DateTime.now().millisecondsSinceEpoch.toString();
                             final name = (registrationData['fullName'] ?? registrationData['resident_fullName'] ?? '').toString().trim();
@@ -1015,11 +1115,29 @@ class FinalStepScreen extends StatelessWidget {
                             try {
                               final f = Farmer(id: id, name: name.isEmpty ? 'Unnamed' : name, phone: '', address: address, mobile: mobile, nic: nic, billNumber: billNo, fieldVisitorCode: AppSession.displayFieldCode);
                               farmerStore.addFarmer(f);
+                              // Generate PDF summary and add to notifications
+                              try {
+                                final bytes = await _buildPdfBytes();
+                                notificationStore.addNotification(NotificationEntry(
+                                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                  title: 'Member Registered: ${name.isEmpty ? 'Unnamed' : name}',
+                                  body: 'Tap to view/download the registration summary.',
+                                  date: DateTime.now(),
+                                  pdfData: bytes,
+                                  pdfFileName: 'Member_${name.replaceAll(' ', '_')}_$id.pdf',
+                                ));
+                              } catch (e) {
+                                // ignore PDF errors but log for debugging
+                                // ignore: avoid_print
+                                print('Failed to attach member PDF: $e');
+                                messenger.showSnackBar(SnackBar(content: Text('PDF export failed: $e')));
+                              }
                             } catch (_) {}
 
+                            if (!c.mounted) return;
                             Navigator.of(c).pop();
                             showSuccessDialog(ctx, 'Successfully Registered', 'Your request is registered and added to members.', onOk: () {
-                              Navigator.of(ctx).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const MambersList()), (r) => false);
+                              nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const MambersList()), (r) => false);
                             });
                           },
                           child: const Text('Submit'),
@@ -1081,6 +1199,13 @@ class FinalStepScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: const Text('< Back')),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: () => _exportPdf(context),
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryGreen),
+                          icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+                          label: const Text('Export PDF', style: TextStyle(color: Colors.white)),
                         ),
                         const SizedBox(width: 12),
                         Expanded(

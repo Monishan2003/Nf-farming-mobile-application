@@ -4,6 +4,7 @@ import 'screens/manager_dashboard.dart';
 import 'screens/field_visitors_list.dart';
 import 'screens/monthly_report.dart';
 import 'screens/manager_profile.dart';
+import 'screens/notifications_screen.dart';
 
 class ManagerFooter extends StatelessWidget {
   final int currentIndex;
@@ -29,8 +30,9 @@ class ManagerFooter extends StatelessWidget {
           children: [
             _item(context, Icons.dashboard, 'Dashboard', 0),
             _item(context, Icons.group, 'Field Visitors', 1),
-            _item(context, Icons.notifications, 'Report', 2),
-            _item(context, Icons.person, 'Profile', 3),
+            _item(context, Icons.report, 'Report', 2),
+            _item(context, Icons.notifications, 'Notifications', 3),
+            _item(context, Icons.person, 'Profile', 4),
           ],
         ),
       ),
@@ -72,6 +74,9 @@ class ManagerFooter extends StatelessWidget {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MonthlyReportScreen()));
         break;
       case 3:
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())); 
+        break;
+      case 4:
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManagerProfileScreen()));
         break;
       default:
