@@ -47,8 +47,6 @@ Widget headerBox({required Widget child}) {
 
 Widget appHeader() {
   // Developer-supplied local image path (used as file URL here)
-  const String localLogoPath = '/mnt/data/bd7d6869-1479-4245-9512-9179aa036e98.png';
-  final fileUrl = 'file://$localLogoPath';
 
   return headerBox(
     child: Column(
@@ -56,20 +54,11 @@ Widget appHeader() {
       children: [
         Row(
           children: [
-            // Attempt to load local file URL. If it fails, show fallback icon.
-            Image.network(
-              fileUrl,
-              height: 56,
-              errorBuilder: (_, __, ___) => Container(
-                height: 56,
-                width: 56,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: const Icon(Icons.eco, color: Colors.white, size: 30),
+              // Use bundled app logo asset
+              ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: Image.asset('assets/images/nf logo.jpg', height: 56, width: 56, fit: BoxFit.cover),
               ),
-            ),
             const SizedBox(width: 12),
             const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,7 +274,11 @@ class _WelcomeFormScreenState extends State<WelcomeFormScreen> {
                         TextFormField(
                           controller: _nicController,
                           decoration: formDecoration(hint: '123456789V', prefixIcon: Icons.badge),
-                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter NIC' : null,
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Please enter NIC';
+                            if (!_isValidNic(v)) return 'Enter valid NIC (9 digits + V/X or 12 digits)';
+                            return null;
+                          },
                         ),
                       ],
                     ),
@@ -305,10 +298,7 @@ class _WelcomeFormScreenState extends State<WelcomeFormScreen> {
                           decoration: formDecoration(hint: '+94 77 123 4567', prefixIcon: Icons.phone),
                           validator: (v) {
                             if (v == null || v.trim().isEmpty) return 'Please enter mobile number';
-                            final s = v.replaceAll(RegExp(r'\s+'), '');
-                            if (!(s.startsWith('+94') || s.startsWith('07') || s.startsWith('7'))) {
-                              return 'Enter valid Sri Lanka number';
-                            }
+                            if (!_isValidSriLankaMobile(v)) return 'Enter valid Sri Lanka number';
                             return null;
                           },
                         ),
@@ -723,7 +713,11 @@ class _ResidentsScreenState extends State<ResidentsScreen> {
                       TextFormField(controller: fullName, decoration: formDecoration(hint: 'Full Name', prefixIcon: Icons.person), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
                       const SizedBox(height: 10),
 
-                      TextFormField(controller: nic, decoration: formDecoration(hint: 'N.I.C Number', prefixIcon: Icons.badge), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
+                      TextFormField(controller: nic, decoration: formDecoration(hint: 'N.I.C Number', prefixIcon: Icons.badge), validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Required';
+                        if (!_isValidNic(v)) return 'Enter valid NIC';
+                        return null;
+                      }),
                       const SizedBox(height: 10),
 
                       TextFormField(
@@ -732,8 +726,7 @@ class _ResidentsScreenState extends State<ResidentsScreen> {
                         keyboardType: TextInputType.phone,
                         validator: (v) {
                           if (v == null || v.trim().isEmpty) return 'Required';
-                          final s = v.replaceAll(RegExp(r'\s+'), '');
-                          if (!(s.startsWith('+94') || s.startsWith('07') || s.startsWith('7'))) return 'Enter valid Sri Lanka number';
+                          if (!_isValidSriLankaMobile(v)) return 'Enter valid Sri Lanka number';
                           return null;
                         },
                       ),
@@ -1008,10 +1001,13 @@ class FinalStepScreen extends StatelessWidget {
                               return;
                             }
 
-                            // simple mobile normalization check
-                            final s = mobile.replaceAll(RegExp(r'\s+'), '');
-                            if (!(s.startsWith('+94') || s.startsWith('07') || s.startsWith('7'))) {
+                            if (!_isValidSriLankaMobile(mobile)) {
                               showDialog(context: ctx, builder: (d) => AlertDialog(title: const Text('Invalid mobile'), content: const Text('Enter a valid Sri Lanka mobile number.'), actions: [TextButton(onPressed: () => Navigator.of(d).pop(), child: const Text('OK'))]));
+                              return;
+                            }
+
+                            if (nic.isNotEmpty && !_isValidNic(nic)) {
+                              showDialog(context: ctx, builder: (d) => AlertDialog(title: const Text('Invalid NIC'), content: const Text('Enter a valid NIC (9 digits + V/X or 12 digits).'), actions: [TextButton(onPressed: () => Navigator.of(d).pop(), child: const Text('OK'))]));
                               return;
                             }
 
@@ -1136,4 +1132,30 @@ class RegistrationCompleteScreen extends StatelessWidget {
       bottomNavigationBar: const AppFooter(),
     );
   }
+}
+
+// --- Validation helpers ---
+bool _isValidSriLankaMobile(String input) {
+  final s = input.replaceAll(RegExp(r'\s+'), '');
+  // If regex anchors cause issues on some editors, fall back to simple checks
+  try {
+    if (s.startsWith('+94') || s.startsWith('07') || s.startsWith('7')) return true;
+  } catch (_) {}
+  return false;
+}
+
+bool _isValidNic(String input) {
+  final v = input.trim();
+  if (v.isEmpty) return false;
+  // Old NIC: 9 digits + V or X
+  final oldNic = RegExp(r'^\d{9}[VXvx]$');
+  // New NIC: 12 digits
+  final newNic = RegExp(r'^\d{12}$');
+  try {
+    if (oldNic.hasMatch(v) || newNic.hasMatch(v)) return true;
+  } catch (_) {}
+  // relaxed fallback: allow 9+1 char ending in V/X or 12 digits
+  if (v.length == 10 && RegExp(r'^\d{9}[VXvx]$').hasMatch(v)) return true;
+  if (v.length == 12 && RegExp(r'^\d{12}$').hasMatch(v)) return true;
+  return false;
 }

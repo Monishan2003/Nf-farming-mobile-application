@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../app_colors.dart';
 import '../manager_footer.dart';
 import '../visitor_store.dart';
+import 'field_visitors_list.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() { runApp(const NatureFarmingApp()); }
@@ -125,7 +126,7 @@ class TopHeader extends StatelessWidget {
               CircleAvatar(
                 radius: 26,
                 backgroundColor: Colors.white,
-                child: Icon(Icons.eco, color: AppColors.primaryGreen, size: 28),
+                child: ClipOval(child: Image.asset('assets/images/nf logo.jpg', fit: BoxFit.cover)),
               ),
               const SizedBox(width: 14),
               Column(
@@ -210,6 +211,32 @@ class LabeledInput extends StatelessWidget {
   }
 }
 
+// --- Validation helpers for Field Visitor registration ---
+bool _isValidSriLankaMobileField(String input) {
+  if (input.trim().isEmpty) return false;
+  // Remove all non-digit characters so we can validate the numeric form
+  final digits = input.replaceAll(RegExp(r'[^0-9]'), '');
+  // Accept formats:
+  // - 9 digits starting with 7 (e.g. 772345678)
+  // - 10 digits starting with 07 (e.g. 0772345678)
+  // - 11 digits starting with 94 (e.g. 94772345678) -> from +94
+  // - 13 digits starting with 0094 (e.g. 0094772345678)
+  if (digits.length == 9 && digits.startsWith('7')) return true;
+  if (digits.length == 10 && digits.startsWith('07')) return true;
+  if (digits.length == 11 && digits.startsWith('94')) return true;
+  if (digits.length == 13 && digits.startsWith('0094')) return true;
+  return false;
+}
+
+bool _isValidNicField(String input) {
+  final v = input.trim();
+  if (v.isEmpty) return false;
+  try {
+     if (RegExp(r'^\d{9}[VXvx]$').hasMatch(v) || RegExp(r'^\d{12}$').hasMatch(v)) return true;
+  } catch (_) {}
+  return false;
+}
+
 // Replaced earlier small radio helper with modern matching widgets in-place.
 
 /// Main registration screen with step navigation
@@ -276,7 +303,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   void goToStep(int step) {
     setState(() {
-      currentStep = step.clamp(0, 5);
+      currentStep = step.clamp(0, 4);
     });
     pageController.animateToPage(currentStep, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
   }
@@ -298,6 +325,33 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       _showSnack('Enter full name');
       return false;
     }
+
+    // Mobile is collected in the OTP verification overlay; allow empty here
+    // so the user can enter the mobile number in the overlay before sending OTP.
+    final mobileVal = tcMobile.text.trim();
+    if (mobileVal.isNotEmpty && !_isValidSriLankaMobileField(mobileVal)) {
+      _showSnack('Enter valid Sri Lanka mobile number');
+      return false;
+    }
+
+    // NIC validation (required)
+    final nicVal = tcNIC.text.trim();
+    if (nicVal.isEmpty) {
+      _showSnack('Enter NIC number');
+      return false;
+    }
+    if (!_isValidNicField(nicVal)) {
+      _showSnack('Enter valid NIC (9 digits + V/X or 12 digits)');
+      return false;
+    }
+
+    // Email optional but if provided should be valid
+    final emailVal = tcEmail.text.trim();
+    if (emailVal.isNotEmpty && !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(emailVal)) {
+      _showSnack('Enter valid email address');
+      return false;
+    }
+
     return true;
   }
 
@@ -422,7 +476,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  void _submitApplication() {
+  void _submitApplication({VoidCallback? onOkOverride}) {
     // For demo: do minimal validation and show success
     model.signature = tcSignature.text;
     model.signDate = DateTime.now();
@@ -435,11 +489,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final address = tcPostal.text.trim().isNotEmpty ? tcPostal.text.trim() : (tcPermanent.text.trim().isNotEmpty ? tcPermanent.text.trim() : '');
       visitorStore.addVisitor(Visitor(id: id, name: name, code: code, address: address));
     } catch (_) {}
-
     _showSuccessPopup('Successfully Registered', 'Your application has been submitted successfully.', onOk: () {
+      if (onOkOverride != null) {
+        onOkOverride();
+        return;
+      }
       // reset or go to first
       setState(() {
-        // optionally reset model or navigate
         goToStep(0);
         pageController.jumpToPage(0);
       });
@@ -654,8 +710,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         return _referencesAndAdditionalScreen();
       case 4:
         return _reviewScreen();
-      case 5:
-        return _submitScreen();
       default:
         return const SizedBox.shrink();
     }
@@ -863,39 +917,23 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             _previousButton(() => goToStep(3)),
-            ElevatedButton(onPressed: () => goToStep(5), child: const Text('Submit Application')),
+            ElevatedButton(
+              onPressed: () {
+                // Confirm & submit directly from review screen
+                _submitApplication(onOkOverride: () {
+                  // After success popup closes, navigate to Field Visitors list
+                  Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const FieldVisitorsListScreen()));
+                });
+              },
+              child: const Text('Confirm & Submit'),
+            ),
           ])
         ]),
       ),
     );
   }
 
-  Widget _submitScreen() {
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(children: [
-        const SizedBox(height: 8),
-        const Text('Submit Application', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        const Text('Please review all details before submitting.'),
-        const SizedBox(height: 12),
-        ElevatedButton.icon(
-          onPressed: () {
-            // validate signature
-            if (tcSignature.text.trim().isEmpty) {
-              _showSnack('Please enter signature in declaration');
-              return;
-            }
-            _submitApplication();
-          },
-          icon: const Icon(Icons.send),
-          label: const Text('Submit'),
-        ),
-        const SizedBox(height: 10),
-        _previousButton(() => goToStep(4)),
-      ]),
-    );
-  }
+  // _submitScreen removed — confirmation now happens on the review screen
 
   @override
   Widget build(BuildContext context) {
@@ -912,7 +950,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           child: PageView.builder(
             controller: pageController,
             physics: const NeverScrollableScrollPhysics(),
-              itemCount: 6,
+            itemCount: 5,
             itemBuilder: (_, index) {
               return SingleChildScrollView(child: _buildStepContent(index));
             },

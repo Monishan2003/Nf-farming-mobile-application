@@ -137,7 +137,7 @@ class BillDetailScreen extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: const Icon(Icons.store, color: AppColors.primaryGreen, size: 30),
+            child: ClipOval(child: Image.asset('assets/images/nf logo.jpg', fit: BoxFit.cover)),
           ),
           const SizedBox(width: 16),
           Expanded(

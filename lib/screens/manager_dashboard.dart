@@ -68,16 +68,10 @@ class ManagerDashboard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 26,
                 backgroundColor: Colors.white,
-                child: Text(
-                  'NF',
-                  style: TextStyle(
-                    color: AppColors.green,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                backgroundImage: const AssetImage('assets/images/nf logo.jpg'),
               ),
               const SizedBox(width: 16),
               Expanded(

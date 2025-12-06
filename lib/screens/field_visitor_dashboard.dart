@@ -90,12 +90,15 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(Icons.eco, color: Colors.green, size: 24),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Image.asset('assets/images/nf logo.jpg', height: 36, width: 36, fit: BoxFit.cover),
+                              ),
                             ),
                             const SizedBox(width: 8),
                             const Text(

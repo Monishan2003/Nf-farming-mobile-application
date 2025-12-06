@@ -32,13 +32,23 @@ class _LoginPageState extends State<LoginPage> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Background decorative gradient
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFFF6FFF7), Color(0xFFEFF9F0)],
+            // Background image (subtle) with gradient overlay for contrast
+            Positioned.fill(
+              child: Image.asset(
+                'assets/images/alovera.webp',
+                fit: BoxFit.cover,
+                color: const Color.fromRGBO(255, 255, 255, 0.6),
+                colorBlendMode: BlendMode.modulate,
+              ),
+            ),
+            Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0x80F6FFF7), Color(0x80EFF9F0)],
+                  ),
                 ),
               ),
             ),
@@ -66,10 +76,10 @@ class _LoginPageState extends State<LoginPage> {
                     // Logo
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.eco, color: Colors.green, size: 36),
-                        SizedBox(width: 8),
-                        Text(
+                      children: [
+                        Image.asset('assets/images/nf logo.jpg', height: 36),
+                        const SizedBox(width: 8),
+                        const Text(
                           'NF Farming',
                           style: TextStyle(
                             color: Colors.green,
