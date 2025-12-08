@@ -5,6 +5,7 @@ class AppSession {
   static String? fieldName;
   static String? fieldCode;
   static String? fieldPhone;
+  static String? fieldVisitorId; // Add field visitor ID for API calls
 
   static void setManager({required String name, required String code}) {
     role = 'manager';
@@ -29,6 +30,7 @@ class AppSession {
     fieldName = null;
     fieldCode = null;
     fieldPhone = null;
+    fieldVisitorId = null;
   }
 
   static String get displayFieldName => fieldName ?? 'Field Visitor';

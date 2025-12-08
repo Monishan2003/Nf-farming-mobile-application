@@ -12,6 +12,7 @@ import 'package:printing/printing.dart';
 import 'bill_detail_screen.dart';
 import '../notifications.dart';
 import '../session.dart';
+import '../services/api_service.dart';
 
 // Central bill history for reporting
 final List<BillDetailData> billHistory = [];
@@ -26,6 +27,7 @@ class Farmer {
   String nic;
   String billNumber;
   String fieldVisitorCode;
+  String fieldVisitorId;
   double totalBuy;
   double totalSell;
 
@@ -37,6 +39,7 @@ class Farmer {
     required this.mobile,
     required this.nic,
     this.fieldVisitorCode = '',
+    this.fieldVisitorId = '',
     this.billNumber = '',
     this.totalBuy = 0.0,
     this.totalSell = 0.0,
@@ -47,10 +50,7 @@ class Farmer {
 // Removed SmallPie and painters — pies are no longer displayed.
 
 class FarmerStore extends ChangeNotifier {
-  final List<Farmer> _farmers = [
-    Farmer(id: '1', name: 'Salman', phone: '03250', address: 'Jaffna', mobile: '0717233478', nic: '4001', billNumber: 'B001', fieldVisitorCode: '', totalBuy: 0.0, totalSell: 0.0),
-    Farmer(id: '2', name: 'Ram kumar', phone: '0712345678', address: 'Jaffna,Srilanka', mobile: '071234678', nic: '1001', billNumber: 'B002', fieldVisitorCode: '', totalBuy: 0.0, totalSell: 0.0),
-  ];
+  final List<Farmer> _farmers = [];
 
   String _query = '';
   Farmer? _selected;
@@ -78,6 +78,7 @@ class FarmerStore extends ChangeNotifier {
   /// Add a new farmer to the store.
   void addFarmer(Farmer f) {
     _farmers.add(f);
+    _selected ??= f;
     notifyListeners();
   }
 
@@ -89,7 +90,17 @@ class FarmerStore extends ChangeNotifier {
       return;
     } catch (_) {
       final id = DateTime.now().millisecondsSinceEpoch.toString();
-      final f = Farmer(id: id, name: name, phone: '', address: '', mobile: '', nic: '', billNumber: '', fieldVisitorCode: AppSession.displayFieldCode);
+      final f = Farmer(
+        id: id,
+        name: name,
+        phone: '',
+        address: '',
+        mobile: '',
+        nic: '',
+        billNumber: '',
+        fieldVisitorCode: AppSession.displayFieldCode,
+        fieldVisitorId: AppSession.fieldVisitorId ?? '',
+      );
       _farmers.add(f);
       selectFarmer(f);
       notifyListeners();
@@ -214,10 +225,71 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isLoading = false;
+
   @override
   void initState() {
     super.initState();
     farmerStore.addListener(_onStoreChanged);
+    _loadMembers();
+  }
+
+  Future<void> _loadMembers() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    
+    try {
+      final fieldVisitorId = AppSession.fieldVisitorId;
+      if (fieldVisitorId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Session error. Please login again.')),
+          );
+        }
+        return;
+      }
+      
+      final response = await ApiService.getMembers(fieldVisitorId: fieldVisitorId.toString());
+      
+      if (response['success'] == true) {
+        final List<dynamic> membersData = response['data'] ?? [];
+        for (var memberData in membersData) {
+          final farmer = Farmer(
+            id: memberData['id']?.toString() ?? '',
+            name: memberData['full_name'] ?? '',
+            phone: memberData['mobile'] ?? '',
+            address: memberData['postal_address'] ?? memberData['permanent_address'] ?? '',
+            mobile: memberData['mobile'] ?? '',
+            nic: memberData['nic'] ?? '',
+            billNumber: memberData['member_code']?.toString() ?? '',
+            fieldVisitorCode: AppSession.fieldCode ?? '',
+            fieldVisitorId: memberData['field_visitor_id']?.toString() ?? (AppSession.fieldVisitorId ?? ''),
+            totalBuy: 0.0,
+            totalSell: 0.0,
+          );
+          
+          if (!farmerStore.farmers.any((f) => f.id == farmer.id)) {
+            farmerStore.addFarmer(farmer);
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response['message'] ?? 'Failed to load members')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading members: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   void _onStoreChanged() => setState(() {});
@@ -403,9 +475,28 @@ class _BuyingScreenState extends State<BuyingScreen> {
   String _stage = 'initial'; // initial, confirmation, done
   final TextEditingController _countController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
-  String _selectedProduct = 'Alo Vera Small (Packet)';
+  String _selectedProduct = 'Aloe Vera Small (Packet)';
   String _selectedUnit = 'number';
   final List<String> _unitOptions = const ['Kg', 'g', 'number'];
+
+  String _resolveFieldVisitorId(Farmer f) {
+    if ((AppSession.fieldVisitorId ?? '').isNotEmpty) return AppSession.fieldVisitorId!;
+    return f.fieldVisitorId;
+  }
+
+  // Map product display names to API product IDs
+  String _productIdForName(String name) {
+    switch (name) {
+      case 'Aloe Vera Leaf':
+        return 'prod-001';
+      case 'Aloe Vera Small (Packet)':
+        return 'prod-002';
+      case 'Aloe Vera Small':
+        return 'prod-003';
+      default:
+        return 'prod-002';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -433,9 +524,9 @@ class _BuyingScreenState extends State<BuyingScreen> {
               DropdownButton<String>(
                 value: _selectedProduct,
                 items: const [
-                  DropdownMenuItem(value: 'Alo Vera leaf(g / Kg)', child: Text('Alo Vera leaf')),
-                  DropdownMenuItem(value: 'Alo Vera Small (Packet)', child: Text('Alo Vera Small (Packet)')),
-                  DropdownMenuItem(value: 'Alo Vera Small', child: Text('Alo Vera Small')),
+                  DropdownMenuItem(value: 'Aloe Vera Leaf', child: Text('Aloe Vera Leaf')),
+                  DropdownMenuItem(value: 'Aloe Vera Small (Packet)', child: Text('Aloe Vera Small (Packet)')),
+                  DropdownMenuItem(value: 'Aloe Vera Small', child: Text('Aloe Vera Small')),
                 ],
                 onChanged: (v) => setState(() {
                   _selectedProduct = v!;
@@ -483,46 +574,156 @@ class _BuyingScreenState extends State<BuyingScreen> {
             width: double.infinity,
               child: ElevatedButton(
               onPressed: () async {
-                final amount = double.tryParse(_computeTotal()) ?? 0.0;
-                farmerStore.addBuy(amount);
-                final f = farmerStore.selected;
-                final billNo = _genBillNo(prefix: 'B');
-                final detail = BillDetailData(
-                  billNo: billNo,
-                  type: 'BUY',
-                  date: DateTime.now(),
-                  memberName: f?.name ?? 'Iben Israar',
-                  memberPhone: f?.mobile ?? '0717234478',
-                  memberAddress: f?.address ?? 'Jaffna,Srilanka',
-                  product: _selectedProduct,
-                  quantityLabel: 'Count',
-                  quantity: int.tryParse(_countController.text) ?? 0,
-                  unitPrice: double.tryParse(_priceController.text) ?? 0.0,
-                  total: amount,
-                  fieldVisitorName: AppSession.displayFieldName,
-                  fieldVisitorPhone: AppSession.displayFieldPhone,
-                  fieldVisitorCode: AppSession.displayFieldCode,
-                  companyName: 'Nature Farming',
+                // Show loading indicator
+                if (!context.mounted) return;
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (ctx) => const AlertDialog(
+                    content: Row(
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(width: 16),
+                        Text('Saving transaction...'),
+                      ],
+                    ),
+                  ),
                 );
-                // Save to central bill history for reporting
-                billHistory.add(detail);
-                // Add a notification entry for UI visibility
-                notificationStore.addNotification(NotificationEntry(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  title: 'New ${detail.type} Bill: ${detail.billNo}',
-                  body: '${detail.memberName} - ${detail.total.toStringAsFixed(2)}',
-                  date: DateTime.now(),
-                  billData: detail,
-                ));
-                // Show the bill detail screen first (user can download PDF),
-                // then open the Notifications screen so the user sees the message.
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
-                );
-                // After viewing the bill, show the Notifications screen (guard against disposed context)
-                if (!mounted) return;
-                await Navigator.of(context).pushNamed('/notifications');
-                if (mounted) widget.onFinished?.call();
+
+                try {
+                  final f = farmerStore.selected;
+                  final quantity = int.tryParse(_countController.text) ?? 0;
+                  final unitPrice = double.tryParse(_priceController.text) ?? 0.0;
+                  final amount = quantity * unitPrice;
+
+                  // Validate required fields before API call
+                  if (f == null || f.id.isEmpty) {
+                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a member first')),
+                      );
+                    }
+                    return;
+                  }
+                  final fvId = _resolveFieldVisitorId(f);
+                  if (fvId.isEmpty) {
+                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Session missing field visitor ID. Please login again.')),
+                      );
+                    }
+                    return;
+                  }
+                  if (_productIdForName(_selectedProduct).isEmpty) {
+                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a product')),
+                      );
+                    }
+                    return;
+                  }
+                  if (quantity <= 0 || unitPrice <= 0) {
+                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Enter a valid quantity and price')),
+                      );
+                    }
+                    return;
+                  }
+
+                  // Log payload for debugging missing fields
+                  final buyPayload = {
+                    'transactionType': 'BUY',
+                    'memberId': f.id,
+                    'fieldVisitorId': fvId,
+                    'productId': _productIdForName(_selectedProduct),
+                    'companyId': 'company-001',
+                    'quantity': quantity,
+                    'unitType': _selectedUnit,
+                    'unitPrice': unitPrice,
+                  };
+                  debugPrint('BUY payload => $buyPayload');
+
+                  // Call API to save transaction
+                  final result = await ApiService.createTransaction(
+                    transactionType: buyPayload['transactionType'] as String,
+                    memberId: buyPayload['memberId'] as String,
+                    fieldVisitorId: buyPayload['fieldVisitorId'] as String,
+                    productId: buyPayload['productId'] as String,
+                    companyId: buyPayload['companyId'] as String,
+                    quantity: buyPayload['quantity'] as int,
+                    unitType: buyPayload['unitType'] as String,
+                    unitPrice: buyPayload['unitPrice'] as double,
+                  );
+
+                  if (!mounted) return;
+                  Navigator.of(context).pop(); // Close loading dialog
+
+                  if (result['success'] == true) {
+                    // API save successful
+                    farmerStore.addBuy(amount);
+                    final billNo = result['data']['billNumber'] ?? _genBillNo(prefix: 'B');
+                    final detail = BillDetailData(
+                      billNo: billNo,
+                      type: 'BUY',
+                      date: DateTime.now(),
+                      memberName: f.name,
+                      memberPhone: f.mobile,
+                      memberAddress: f.address,
+                      product: _selectedProduct,
+                      quantityLabel: 'Count',
+                      quantity: quantity,
+                      unitPrice: unitPrice,
+                      total: amount,
+                      fieldVisitorName: AppSession.displayFieldName,
+                      fieldVisitorPhone: AppSession.displayFieldPhone,
+                      fieldVisitorCode: AppSession.displayFieldCode,
+                      companyName: 'Nature Farming',
+                    );
+                    // Save to central bill history for reporting
+                    billHistory.add(detail);
+                    // Add a notification entry for UI visibility
+                    notificationStore.addNotification(NotificationEntry(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      title: 'New ${detail.type} Bill: ${detail.billNo}',
+                      body: '${detail.memberName} - ${detail.total.toStringAsFixed(2)}',
+                      date: DateTime.now(),
+                      billData: detail,
+                    ));
+                    // Show the bill detail screen first (user can download PDF),
+                    // then open the Notifications screen so the user sees the message.
+                    if (!mounted) return;
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
+                    );
+                    // After viewing the bill, show the Notifications screen (guard against disposed context)
+                    if (!mounted) return;
+                    await Navigator.of(context).pushNamed('/notifications');
+                    if (mounted) widget.onFinished?.call();
+                  } else {
+                    // API error
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: ${result['message'] ?? 'Failed to save transaction'}'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (!mounted) return;
+                  Navigator.of(context).pop(); // Close loading dialog
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).primaryColor,
@@ -626,6 +827,7 @@ class _BuyingScreenState extends State<BuyingScreen> {
                       flex: 1,
                       child: DropdownButtonFormField<String>(
                         initialValue: _selectedUnit,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Unit',
                           border: OutlineInputBorder(),
@@ -721,9 +923,23 @@ class _SellingScreenState extends State<SellingScreen> {
   String _stage = 'initial';
   final TextEditingController _weightController = TextEditingController();
   final TextEditingController _sellPriceController = TextEditingController();
-  String _selectedSellProduct = 'Alo Vera leaf';
+  String _selectedSellProduct = 'Aloe Vera Leaf';
   String _selectedWeightUnit = 'Kg';
   final List<String> _unitOptions = const ['Kg', 'g', 'number'];
+
+  // Map product display names to API product IDs
+  String _productIdForName(String name) {
+    switch (name) {
+      case 'Aloe Vera Leaf':
+        return 'prod-001';
+      case 'Aloe Vera Small (Packet)':
+        return 'prod-002';
+      case 'Aloe Vera Small':
+        return 'prod-003';
+      default:
+        return 'prod-002';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -756,9 +972,9 @@ class _SellingScreenState extends State<SellingScreen> {
                     DropdownButton<String>(
                       value: _selectedSellProduct,
                       items: const [
-                        DropdownMenuItem(value: 'Alo Vera leaf', child: Text('Alo Vera leaf')),
-                        DropdownMenuItem(value: 'Alo Vera Small (Packet)', child: Text('Alo Vera Small (Packet)')),
-                        DropdownMenuItem(value: 'Alo Vera Small', child: Text('Alo Vera Small')),
+                        DropdownMenuItem(value: 'Aloe Vera Leaf', child: Text('Aloe Vera Leaf')),
+                        DropdownMenuItem(value: 'Aloe Vera Small (Packet)', child: Text('Aloe Vera Small (Packet)')),
+                        DropdownMenuItem(value: 'Aloe Vera Small', child: Text('Aloe Vera Small')),
                       ],
                       onChanged: (v) => setState(() {
                         _selectedSellProduct = v!;
@@ -801,6 +1017,7 @@ class _SellingScreenState extends State<SellingScreen> {
                       flex: 1,
                       child: DropdownButtonFormField<String>(
                         initialValue: _selectedWeightUnit,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Unit',
                           border: OutlineInputBorder(),
@@ -877,43 +1094,155 @@ class _SellingScreenState extends State<SellingScreen> {
             width: double.infinity,
               child: ElevatedButton(
               onPressed: () async {
-                final amount = double.tryParse(_computeSellTotal()) ?? 0.0;
-                farmerStore.addSell(amount);
-                final f = farmerStore.selected;
-                final billNo = _genBillNo(prefix: 'S');
-                final detail = BillDetailData(
-                  billNo: billNo,
-                  type: 'SELL',
-                  date: DateTime.now(),
-                  memberName: f?.name ?? 'Iben Israar',
-                  memberPhone: f?.mobile ?? '0717234478',
-                  memberAddress: f?.address ?? 'Jaffna,Srilanka',
-                  product: _selectedSellProduct,
-                  quantityLabel: 'count',
-                  quantity: int.tryParse(_weightController.text) ?? 0,
-                  unitPrice: double.tryParse(_sellPriceController.text) ?? 0.0,
-                  total: amount,
-                  fieldVisitorName: AppSession.displayFieldName,
-                  fieldVisitorPhone: AppSession.displayFieldPhone,
-                  fieldVisitorCode: AppSession.displayFieldCode,
-                  companyName: 'Nature Farming',
+                // Show loading indicator
+                if (!context.mounted) return;
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (ctx) => const AlertDialog(
+                    content: Row(
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(width: 16),
+                        Text('Saving transaction...'),
+                      ],
+                    ),
+                  ),
                 );
-                // Save to central bill history for reporting
-                billHistory.add(detail);
-                // Add a notification entry for UI visibility
-                notificationStore.addNotification(NotificationEntry(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  title: 'New ${detail.type} Bill: ${detail.billNo}',
-                  body: '${detail.memberName} - ${detail.total.toStringAsFixed(2)}',
-                  date: DateTime.now(),
-                  billData: detail,
-                ));
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
-                );
-                if (!mounted) return;
-                await Navigator.of(context).pushNamed('/notifications');
-                if (mounted) widget.onFinished?.call();
+
+                try {
+                  final f = farmerStore.selected;
+                  final quantity = int.tryParse(_weightController.text) ?? 0;
+                  final unitPrice = double.tryParse(_sellPriceController.text) ?? 0.0;
+                  final amount = quantity * unitPrice;
+
+                  // Validate required fields before API call
+                  if (f == null || f.id.isEmpty) {
+                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a member first')),
+                      );
+                    }
+                    return;
+                  }
+                  final fvId = (AppSession.fieldVisitorId ?? '').isNotEmpty
+                      ? AppSession.fieldVisitorId!
+                      : f.fieldVisitorId;
+                  if (fvId.isEmpty) {
+                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Session missing field visitor ID. Please login again.')),
+                      );
+                    }
+                    return;
+                  }
+                  if (_productIdForName(_selectedSellProduct).isEmpty) {
+                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a product')),
+                      );
+                    }
+                    return;
+                  }
+                  if (quantity <= 0 || unitPrice <= 0) {
+                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Enter a valid quantity and price')),
+                      );
+                    }
+                    return;
+                  }
+
+                  final sellPayload = {
+                    'transactionType': 'SELL',
+                    'memberId': f.id,
+                    'fieldVisitorId': fvId,
+                    'productId': _productIdForName(_selectedSellProduct),
+                    'companyId': 'company-001',
+                    'quantity': quantity,
+                    'unitType': _selectedWeightUnit,
+                    'unitPrice': unitPrice,
+                  };
+                  debugPrint('SELL payload => $sellPayload');
+
+                  // Call API to save transaction
+                  final result = await ApiService.createTransaction(
+                    transactionType: sellPayload['transactionType'] as String,
+                    memberId: sellPayload['memberId'] as String,
+                    fieldVisitorId: sellPayload['fieldVisitorId'] as String,
+                    productId: sellPayload['productId'] as String,
+                    companyId: sellPayload['companyId'] as String,
+                    quantity: sellPayload['quantity'] as int,
+                    unitType: sellPayload['unitType'] as String,
+                    unitPrice: sellPayload['unitPrice'] as double,
+                  );
+
+                  if (!mounted) return;
+                  Navigator.of(context).pop(); // Close loading dialog
+
+                  if (result['success'] == true) {
+                    // API save successful
+                    farmerStore.addSell(amount);
+                    final billNo = result['data']['billNumber'] ?? _genBillNo(prefix: 'S');
+                    final detail = BillDetailData(
+                      billNo: billNo,
+                      type: 'SELL',
+                      date: DateTime.now(),
+                      memberName: f.name,
+                      memberPhone: f.mobile,
+                      memberAddress: f.address,
+                      product: _selectedSellProduct,
+                      quantityLabel: 'count',
+                      quantity: quantity,
+                      unitPrice: unitPrice,
+                      total: amount,
+                      fieldVisitorName: AppSession.displayFieldName,
+                      fieldVisitorPhone: AppSession.displayFieldPhone,
+                      fieldVisitorCode: AppSession.displayFieldCode,
+                      companyName: 'Nature Farming',
+                    );
+                    // Save to central bill history for reporting
+                    billHistory.add(detail);
+                    // Add a notification entry for UI visibility
+                    notificationStore.addNotification(NotificationEntry(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      title: 'New ${detail.type} Bill: ${detail.billNo}',
+                      body: '${detail.memberName} - ${detail.total.toStringAsFixed(2)}',
+                      date: DateTime.now(),
+                      billData: detail,
+                    ));
+                    
+                    if (!mounted) return;
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => BillDetailScreen(data: detail)),
+                    );
+                    if (!mounted) return;
+                    await Navigator.of(context).pushNamed('/notifications');
+                    if (mounted) widget.onFinished?.call();
+                  } else {
+                    // API error
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: ${result['message'] ?? 'Failed to save transaction'}'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (!mounted) return;
+                  Navigator.of(context).pop(); // Close loading dialog
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

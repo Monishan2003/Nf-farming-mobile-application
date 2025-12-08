@@ -5,6 +5,7 @@ import '../app_colors.dart';
 import '../field_footer.dart';
 import '../session.dart';
 import 'field_visitor_my_profile.dart';
+import '../services/api_service.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() => runApp(const FarmerManagementApp(homeOverride: FieldVisitorDashboard()));
@@ -20,6 +21,7 @@ class MambersList extends StatefulWidget {
 
 class _MambersListState extends State<MambersList> {
   final TextEditingController _searchCtrl = TextEditingController();
+  bool _isLoading = false;
 
   // Local/sample members removed — member list is driven by `farmerStore`.
 
@@ -65,6 +67,60 @@ class _MambersListState extends State<MambersList> {
   void initState() {
     super.initState();
     farmerStore.addListener(_onStoreChanged);
+    _loadMembers();
+  }
+
+  Future<void> _loadMembers() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    
+    try {
+      final fieldVisitorId = AppSession.fieldVisitorId;
+      if (fieldVisitorId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session error. Please login again.')),
+        );
+        return;
+      }
+      
+      final response = await ApiService.getMembers(fieldVisitorId: fieldVisitorId.toString());
+      
+      if (response['success'] == true) {
+        final List<dynamic> membersData = response['data'] ?? [];
+        for (var memberData in membersData) {
+          final farmer = Farmer(
+            id: memberData['id']?.toString() ?? '',
+            name: memberData['full_name'] ?? '',
+            phone: memberData['mobile'] ?? '',
+            mobile: memberData['mobile'] ?? '',
+            nic: memberData['nic'] ?? '',
+            address: memberData['postal_address'] ?? memberData['permanent_address'] ?? '',
+            billNumber: memberData['member_code']?.toString() ?? '',
+            fieldVisitorCode: AppSession.fieldCode ?? '',
+          );
+          
+          if (!farmerStore.farmers.any((f) => f.id == farmer.id)) {
+            farmerStore.addFarmer(farmer);
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response['message'] ?? 'Failed to load members')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading members: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   void _onStoreChanged() => setState(() {});

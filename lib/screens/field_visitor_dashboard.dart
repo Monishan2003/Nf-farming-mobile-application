@@ -6,6 +6,7 @@ import '../app_colors.dart';
 import '../field_footer.dart';
 import 'field_visitor_my_profile.dart';
 import 'memberlist.dart';
+import '../services/api_service.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() => runApp(const FarmerManagementApp(homeOverride: FieldVisitorDashboard()));
@@ -19,6 +20,63 @@ class FieldVisitorDashboard extends StatefulWidget {
 
 class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
   final TextEditingController _searchCtrl = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    farmerStore.addListener(_onStoreChanged);
+    _loadMembers();
+  }
+
+  Future<void> _loadMembers() async {
+    if (AppSession.fieldVisitorId == null) return;
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      final result = await ApiService.getMembers(
+        fieldVisitorId: AppSession.fieldVisitorId,
+        status: 'active',
+      );
+      
+      if (result['success'] == true && result['data'] != null) {
+        // Clear existing and add members from database
+        final members = result['data'] as List;
+        
+        // Update farmer store with database members
+        for (var member in members) {
+          final farmer = Farmer(
+            id: member['id'].toString(),
+            name: member['full_name'] ?? '',
+            phone: member['mobile'] ?? '',
+            address: member['postal_address'] ?? '',
+            mobile: member['mobile'] ?? '',
+            nic: member['nic'] ?? '',
+            billNumber: member['member_code'] ?? '',
+            fieldVisitorCode: member['field_visitor_id'] ?? '',
+          );
+          
+          // Check if farmer already exists
+          try {
+            farmerStore.farmers.firstWhere((f) => f.id == farmer.id);
+          } catch (_) {
+            farmerStore.addFarmer(farmer);
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading members: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   // Members are sourced from the shared `farmerStore`; remove local sample members.
   List<Map<String, dynamic>> get _filteredMembers {
@@ -45,12 +103,6 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
     super.dispose();
   }
 
-  @override
-  void initState() {
-    super.initState();
-    farmerStore.addListener(_onStoreChanged);
-  }
-
   void _onStoreChanged() => setState(() {});
 
   @override
@@ -67,9 +119,11 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFE8F7EE),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header with logo and profile
@@ -370,6 +424,15 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
             ],
           ),
         ),
+      ),
+          if (_isLoading)
+            Container(
+              color: Colors.black26,
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: const AppFooter(),
     );

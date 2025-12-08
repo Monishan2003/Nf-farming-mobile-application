@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'manager_dashboard.dart';
 import 'field_visitor_dashboard.dart';
 import '../session.dart';
+import '../services/api_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,6 +17,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscure = true;
   int _selectedRole = 0; // 0 = Field Visitor, 1 = Manager
   String _selectedRoleStr = 'field'; // 'field' or 'manager'
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -178,42 +180,91 @@ class _LoginPageState extends State<LoginPage> {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: () {
+                              onPressed: _isLoading ? null : () async {
                                 final username = _userController.text.trim();
                                 final password = _passController.text.trim();
                                 final role = _selectedRoleStr; // 'field' or 'manager'
 
-                                bool valid = false;
-
-                                if (role == 'field') {
-                                  if (username == 'field' && password == '1234') {
-                                    valid = true;
-                                    AppSession.setFieldVisitor(name: 'Ravi Mohan', code: 'k001', phone: '0717000000');
-                                    Navigator.of(context).pushReplacement(MaterialPageRoute(
-                                      builder: (_) => const FieldVisitorDashboard(),
-                                    ));
-                                  }
-                                } else {
-                                  if (username == 'manager' && password == '1234') {
-                                    valid = true;
-                                    AppSession.setManager(name: 'Ravi Mohan', code: 'k001');
-                                    Navigator.of(context).pushReplacement(MaterialPageRoute(
-                                      builder: (_) => const ManagerDashboard(),
-                                    ));
-                                  }
+                                if (username.isEmpty || password.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                    content: Text('Please enter User ID and password.'),
+                                    backgroundColor: Colors.redAccent,
+                                  ));
+                                  return;
                                 }
 
-                                if (!valid) {
-                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                    content: Text('Invalid username or password.'),
+                                setState(() => _isLoading = true);
+
+                                try {
+                                  // Call API for login
+                                  final apiRole = role == 'field' ? 'field_visitor' : 'manager';
+                                  final result = await ApiService.login(
+                                    userId: username,
+                                    password: password,
+                                    role: apiRole,
+                                  );
+
+                                  if (!mounted) return;
+                                  setState(() => _isLoading = false);
+                                  if (!context.mounted) return;
+
+                                  if (result['success'] == true) {
+                                    final data = result['data'];
+                                    final details = data['details'];
+
+                                    if (role == 'field') {
+                                      AppSession.setFieldVisitor(
+                                        name: details['full_name'] ?? 'Field Visitor',
+                                        phone: data['email'] ?? '',
+                                        code: details['visitor_code'] ?? 'FV001',
+                                      );
+                                      
+                                      // Store field visitor ID for API calls
+                                      AppSession.fieldVisitorId = details['id'] ?? '';
+                                      
+                                      if (!context.mounted) return;
+                                      Navigator.of(context).pushReplacement(MaterialPageRoute(
+                                        builder: (_) => const FieldVisitorDashboard(),
+                                      ));
+                                    } else {
+                                      AppSession.setManager(
+                                        name: details['full_name'] ?? 'Manager',
+                                        code: details['manager_code'] ?? 'MGR001',
+                                      );
+                                      
+                                      if (!context.mounted) return;
+                                      Navigator.of(context).pushReplacement(MaterialPageRoute(
+                                        builder: (_) => const ManagerDashboard(),
+                                      ));
+                                    }
+                                  } else {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                      content: Text(result['message'] ?? 'Invalid User ID or password.'),
+                                      backgroundColor: Colors.redAccent,
+                                    ));
+                                  }
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  setState(() => _isLoading = false);
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text('Error: $e'),
                                     backgroundColor: Colors.redAccent,
                                   ));
                                 }
                               },
-                              icon: const Icon(Icons.arrow_forward, size: 18, color: Colors.white),
-                              label: const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: Text('Log in', style: TextStyle(fontSize: 16, color: Colors.white)),
+                              icon: _isLoading
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.arrow_forward, size: 18, color: Colors.white),
+                              label: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                child: Text(_isLoading ? 'Logging in...' : 'Log in',
+                                    style: const TextStyle(fontSize: 16, color: Colors.white)),
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
