@@ -11,10 +11,7 @@ class Visitor {
 }
 
 class VisitorStore extends ChangeNotifier {
-  final List<Visitor> _visitors = [
-    Visitor(id: '1', name: 'Ram Kumar', code: 'AF 0252', address: 'Jaffna, Srilanka'),
-    Visitor(id: '2', name: 'Jhon Kunasingam', code: 'AF 0341', address: 'Green Road, Trincomalee'),
-  ];
+  final List<Visitor> _visitors = [];
 
   UnmodifiableListView<Visitor> get visitors => UnmodifiableListView(_visitors);
 

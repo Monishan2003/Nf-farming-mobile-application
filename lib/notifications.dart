@@ -25,10 +25,17 @@ class NotificationEntry {
 class NotificationStore extends ChangeNotifier {
   final List<NotificationEntry> _items = [];
 
-  List<NotificationEntry> get items => List.unmodifiable(_items.reversed);
+  List<NotificationEntry> get items => List.unmodifiable(_items);
+
+  void setNotifications(List<NotificationEntry> entries) {
+    _items
+      ..clear()
+      ..addAll(entries);
+    notifyListeners();
+  }
 
   void addNotification(NotificationEntry e) {
-    _items.add(e);
+    _items.insert(0, e);
     notifyListeners();
   }
 

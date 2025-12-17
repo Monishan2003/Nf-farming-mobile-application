@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'manager_dashboard.dart';
 import 'field_visitor_dashboard.dart';
+// manager_dashboard.dart import is already at top
 import '../session.dart';
 import '../services/api_service.dart';
 
@@ -71,7 +72,10 @@ class _LoginPageState extends State<LoginPage> {
 
             Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 32,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -143,7 +147,10 @@ class _LoginPageState extends State<LoginPage> {
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide.none,
                               ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
                             ),
                           ),
 
@@ -167,10 +174,18 @@ class _LoginPageState extends State<LoginPage> {
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide.none,
                               ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
                               suffixIcon: IconButton(
-                                icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
-                                onPressed: () => setState(() => _obscure = !_obscure),
+                                icon: Icon(
+                                  _obscure
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _obscure = !_obscure),
                               ),
                             ),
                           ),
@@ -180,95 +195,151 @@ class _LoginPageState extends State<LoginPage> {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: _isLoading ? null : () async {
-                                final username = _userController.text.trim();
-                                final password = _passController.text.trim();
-                                final role = _selectedRoleStr; // 'field' or 'manager'
+                              onPressed: _isLoading
+                                  ? null
+                                  : () async {
+                                      final username = _userController.text
+                                          .trim();
+                                      final password = _passController.text
+                                          .trim();
+                                      final role =
+                                          _selectedRoleStr; // 'field' or 'manager'
 
-                                if (username.isEmpty || password.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                    content: Text('Please enter User ID and password.'),
-                                    backgroundColor: Colors.redAccent,
-                                  ));
-                                  return;
-                                }
+                                      if (username.isEmpty ||
+                                          password.isEmpty) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Please enter User ID and password.',
+                                            ),
+                                            backgroundColor: Colors.redAccent,
+                                          ),
+                                        );
+                                        return;
+                                      }
 
-                                setState(() => _isLoading = true);
+                                      setState(() => _isLoading = true);
 
-                                try {
-                                  // Call API for login
-                                  final apiRole = role == 'field' ? 'field_visitor' : 'manager';
-                                  final result = await ApiService.login(
-                                    userId: username,
-                                    password: password,
-                                    role: apiRole,
-                                  );
+                                      try {
+                                        // DB Login
+                                        // Real API Login
+                                        final response = await ApiService.login(
+                                          username,
+                                          password,
+                                          role,
+                                        );
 
-                                  if (!mounted) return;
-                                  setState(() => _isLoading = false);
-                                  if (!context.mounted) return;
+                                        if (!mounted) return;
+                                        setState(() => _isLoading = false);
 
-                                  if (result['success'] == true) {
-                                    final data = result['data'];
-                                    final details = data['details'];
+                                        if (response['success'] == true) {
+                                          final data = response['data'];
+                                          // Debug: Print received data
+                                          debugPrint('Login response data: $data');
+                                          
+                                          // Proceed with data from API
+                                          if (role == 'field') {
+                                            await AppSession.setFieldVisitor(
+                                              name:
+                                                  data['name'] ??
+                                                  'Field Visitor',
+                                              phone: data['phone'] ?? '',
+                                              code: data['code'] ?? data['userId'] ?? 'FV-001',
+                                              id:
+                                                  data['id']?.toString() ??
+                                                  data['_id']?.toString(),
+                                              branchId: data['branchId']?.toString(),
+                                              jwtToken: data['token'],
+                                            );
+                                            
+                                            // Debug: Print saved session
+                                            debugPrint('Session saved - Name: ${AppSession.fieldName}, ID: ${AppSession.fieldVisitorId}');
+                                            // ID is now set inside setFieldVisitor, redundant line removed
 
-                                    if (role == 'field') {
-                                      AppSession.setFieldVisitor(
-                                        name: details['full_name'] ?? 'Field Visitor',
-                                        phone: data['email'] ?? '',
-                                        code: details['visitor_code'] ?? 'FV001',
-                                      );
-                                      
-                                      // Store field visitor ID for API calls
-                                      AppSession.fieldVisitorId = details['id'] ?? '';
-                                      
-                                      if (!context.mounted) return;
-                                      Navigator.of(context).pushReplacement(MaterialPageRoute(
-                                        builder: (_) => const FieldVisitorDashboard(),
-                                      ));
-                                    } else {
-                                      AppSession.setManager(
-                                        name: details['full_name'] ?? 'Manager',
-                                        code: details['manager_code'] ?? 'MGR001',
-                                      );
-                                      
-                                      if (!context.mounted) return;
-                                      Navigator.of(context).pushReplacement(MaterialPageRoute(
-                                        builder: (_) => const ManagerDashboard(),
-                                      ));
-                                    }
-                                  } else {
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                      content: Text(result['message'] ?? 'Invalid User ID or password.'),
-                                      backgroundColor: Colors.redAccent,
-                                    ));
-                                  }
-                                } catch (e) {
-                                  if (!context.mounted) return;
-                                  setState(() => _isLoading = false);
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                    content: Text('Error: $e'),
-                                    backgroundColor: Colors.redAccent,
-                                  ));
-                                }
-                              },
+                                            if (!context.mounted) return;
+                                            Navigator.of(
+                                              context,
+                                            ).pushReplacement(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const FieldVisitorDashboard(),
+                                              ),
+                                            );
+                                          } else {
+                                            await AppSession.setManager(
+                                              name: data['name'] ?? 'Manager',
+                                              code: data['code'] ?? 'MGR-001',
+                                              branchId: data['branchId']?.toString(),
+                                              jwtToken: data['token'],
+                                              id: data['id']?.toString() ?? data['_id']?.toString(),
+                                            );
+                                            
+                                            // Debug: Print saved session
+                                            debugPrint('Manager session saved - Name: ${AppSession.managerName}');
+
+                                            if (!context.mounted) return;
+                                            Navigator.of(
+                                              context,
+                                            ).pushReplacement(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const ManagerDashboard(),
+                                              ),
+                                            );
+                                          }
+                                        } else {
+                                          throw Exception(
+                                            response['message'] ??
+                                                'Login failed',
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (!context.mounted) return;
+                                        setState(() => _isLoading = false);
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Error: $e'),
+                                            backgroundColor: Colors.redAccent,
+                                          ),
+                                        );
+                                      }
+                                    },
                               icon: _isLoading
                                   ? const SizedBox(
                                       width: 18,
                                       height: 18,
-                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
                                     )
-                                  : const Icon(Icons.arrow_forward, size: 18, color: Colors.white),
+                                  : const Icon(
+                                      Icons.arrow_forward,
+                                      size: 18,
+                                      color: Colors.white,
+                                    ),
                               label: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                child: Text(_isLoading ? 'Logging in...' : 'Log in',
-                                    style: const TextStyle(fontSize: 16, color: Colors.white)),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                child: Text(
+                                  _isLoading ? 'Logging in...' : 'Log in',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
                                 elevation: 2,
                               ),
                             ),
@@ -298,7 +369,9 @@ class _LoginPageState extends State<LoginPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? const Color.fromRGBO(76, 175, 80, 0.12) : Colors.transparent,
+          color: selected
+              ? const Color.fromRGBO(76, 175, 80, 0.12)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(

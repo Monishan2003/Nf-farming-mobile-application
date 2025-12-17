@@ -1,564 +1,298 @@
-// ==========================================
-// FILE: lib/services/api_service.dart
-// ==========================================
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../session.dart';
 
 class ApiService {
-  // Android Emulator (default)
-  static const String baseUrl = 'http://10.0.2.2:3000/api';
-  
-  // Uncomment one of these based on your testing device:
-  // For iOS simulator use: static const String baseUrl = 'http://localhost:3000/api';
-  // For physical device, replace 192.168.x.x with your machine IP:
-  // static const String baseUrl = 'http://192.168.x.x:3000/api';
+  // Dynamically choose URL based on platform
+  static String get baseUrl {
+    // For Android Emulator: use 10.0.2.2
+    // For iOS Simulator: use 127.0.0.1 or localhost
+    // For Physical Device: replace with your computer's IP address (e.g., 192.168.1.100)
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:3000/api'; // Android Emulator
+      // return 'http://192.168.8.100:3000/api'; // Use this for physical device
+    }
+    return 'http://127.0.0.1:3000/api'; // iOS Simulator
+  }
 
-  // Login
-  static Future<Map<String, dynamic>> login({
-    required String userId,
-    required String password,
-    required String role,
-  }) async {
+  // Timeout duration for all HTTP requests
+  static const Duration timeoutDuration = Duration(seconds: 10);
+
+  static Future<Map<String, dynamic>> login(
+    String username,
+    String password,
+    String role,
+  ) async {
+    final url = Uri.parse('$baseUrl/auth/login');
+    try {
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'username': username,
+              'password': password,
+              'role': role,
+            }),
+          )
+          .timeout(
+            timeoutDuration,
+            onTimeout: () {
+              throw Exception(
+                'Connection timeout. Please check:\n'
+                '1. Backend server is running\n'
+                '2. Network connection is active\n'
+                '3. Correct IP address is configured',
+              );
+            },
+          );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        // Check if the response has the expected structure
+        if (data['success'] == true && data['data'] != null) {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Login failed');
+        }
+      } else if (response.statusCode == 401) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['message'] ?? 'Invalid credentials');
+      } else if (response.statusCode >= 400 && response.statusCode < 500) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['message'] ?? 'Request failed');
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } on SocketException {
+      throw Exception(
+        'Cannot connect to server. Please check:\n'
+        '1. Backend server is running (node server.js)\n'
+        '2. Firewall settings allow connection\n'
+        '3. Using correct IP: $baseUrl',
+      );
+    } on TimeoutException {
+      throw Exception('Connection timeout - server not responding');
+    } on FormatException {
+      throw Exception('Invalid response format from server');
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Unexpected error: $e');
+    }
+  }
+
+  static Future<List<dynamic>> getMembers() async {
+    final url = Uri.parse('$baseUrl/members');
+    try {
+      final response = await http.get(url, headers: await _getHeaders());
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body['success'] == true && body['data'] is List) {
+          return body['data'];
+        }
+        return [];
+      } else {
+        throw Exception('Failed to load members: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error fetching members: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> saveTransaction(
+    Map<String, dynamic> payload,
+  ) async {
+    final url = Uri.parse('$baseUrl/transactions');
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'userId': userId,
-          'password': password,
-          'role': role,
-        }),
+        url,
+        headers: await _getHeaders(),
+        body: jsonEncode(payload),
       );
 
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        return {
-          'success': true,
-          'data': data['data'],
-        };
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body);
       } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Login failed',
-        };
+        try {
+          final errBody = jsonDecode(response.body);
+          throw Exception(errBody['message'] ?? 'Transaction failed');
+        } catch (_) {
+          throw Exception('Transaction failed: ${response.statusCode}');
+        }
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
+      throw Exception('Network error saving transaction: $e');
     }
   }
 
-  // Register Member
-  static Future<Map<String, dynamic>> registerMember({
-    required String fullName,
-    required String mobile,
-    required String email,
-    required String fieldVisitorId,
-    required String companyId,
-    String? nic,
-    String? dateOfBirth,
-    String? gender,
-    String? postalAddress,
-    String? permanentAddress,
-    String? locationCoordinates,
-    // Resident details
-    String? residentFullName,
-    String? residentNic,
-    String? residentMobile,
-    String? residentDob,
-    String? residentOccupation,
-    String? residentEducation,
-    // Business details
-    String? landSize,
-    String? activity,
-    String? waterFacility,
-    String? electricity,
-    String? machinery,
-    String? quantityPlants,
-  }) async {
+  static Future<Map<String, dynamic>> registerMember(
+    Map<String, dynamic> memberData,
+  ) async {
+    final url = Uri.parse('$baseUrl/members');
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/members'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'fullName': fullName,
-          'mobile': mobile,
-          'email': email,
-          'fieldVisitorId': fieldVisitorId,
-          'companyId': companyId,
-          'nic': nic,
-          'dateOfBirth': dateOfBirth,
-          'gender': gender,
-          'postalAddress': postalAddress,
-          'permanentAddress': permanentAddress,
-          'locationCoordinates': locationCoordinates,
-          // Resident data
-          'residentFullName': residentFullName,
-          'residentNic': residentNic,
-          'residentMobile': residentMobile,
-          'residentDob': residentDob,
-          'residentOccupation': residentOccupation,
-          'residentEducation': residentEducation,
-          // Business data
-          'landSize': landSize,
-          'activity': activity,
-          'waterFacility': waterFacility,
-          'electricity': electricity,
-          'machinery': machinery,
-          'quantityPlants': quantityPlants,
-        }),
+        url,
+        headers: await _getHeaders(),
+        body: jsonEncode(memberData),
       );
 
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 201 && data['success'] == true) {
-        return {
-          'success': true,
-          'data': data['data'],
-        };
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body);
       } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Registration failed',
-        };
+        throw Exception(
+          'Failed to register member: ${response.statusCode} - ${response.body}',
+        );
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
+      throw Exception('Network error registering member: $e');
     }
   }
 
-  // Get Members
-  static Future<Map<String, dynamic>> getMembers({
-    String? fieldVisitorId,
-    String? status,
-  }) async {
+  static Future<Map<String, dynamic>> getDashboardStats() async {
+    // Route to correct dashboard endpoint by role
+    final bool isManager = AppSession.role == 'manager';
+    final path = isManager
+        ? '/reports/manager-dashboard'
+        : '/reports/field-visitor-dashboard';
+    final url = Uri.parse('$baseUrl$path');
     try {
-      String url = '$baseUrl/members?';
-      
-      if (fieldVisitorId != null) {
-        url += 'fieldVisitorId=$fieldVisitorId&';
-      }
-      
-      if (status != null) {
-        url += 'status=$status';
-      }
-
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        return {
-          'success': true,
-          'data': data['data'],
-        };
+      final response = await http.get(url, headers: await _getHeaders());
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        if (body['success'] == true && body['data'] != null) {
+          return body['data'] as Map<String, dynamic>;
+        }
+        // Legacy shape fallback
+        return body;
       } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Failed to fetch members',
-        };
+        throw Exception('Failed to load dashboard stats: ${response.statusCode}');
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
+      throw Exception('Network error fetching dashboard stats: $e');
     }
   }
 
-  // Register Field Visitor
-  static Future<Map<String, dynamic>> registerFieldVisitor({
-    required String fullName,
-    required String email,
-    required String mobile,
-    required String password,
-    required String managerId,
-    required String companyId,
-    String? address,
-    String? nic,
-    String? gender,
-    String? civilStatus,
-    String? dateOfBirth,
-    String? applicationFor,
-    String? branch,
-    String? designation,
-    String? epfNo,
-    String? bankName,
-    String? bankBranch,
-    String? accountNumber,
-  }) async {
+  static Future<List<dynamic>> getYearlyAnalysis() async {
+    final url = Uri.parse('$baseUrl/reports/yearly');
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/fieldvisitors'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'fullName': fullName,
-          'email': email,
-          'mobile': mobile,
-          'password': password,
-          'managerId': managerId,
-          'companyId': companyId,
-          'address': address,
-          'nic': nic,
-          'gender': gender,
-          'civilStatus': civilStatus,
-          'dateOfBirth': dateOfBirth,
-          'applicationFor': applicationFor,
-          'branch': branch,
-          'designation': designation,
-          'epfNo': epfNo,
-          'bankName': bankName,
-          'bankBranch': bankBranch,
-          'accountNumber': accountNumber,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 201 && data['success'] == true) {
-        return {
-          'success': true,
-          'data': data['data'],
-        };
+      final response = await http.get(url, headers: await _getHeaders());
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
       } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Registration failed',
-        };
+        throw Exception('Failed to load yearly analysis');
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
+      throw Exception('Network error fetching yearly analysis: $e');
     }
   }
 
-  // Get Field Visitors
-  static Future<Map<String, dynamic>> getFieldVisitors({
-    String? managerId,
-    String? status,
-  }) async {
+  static Future<List<dynamic>> getProducts() async {
+    final url = Uri.parse('$baseUrl/products');
     try {
-      String url = '$baseUrl/fieldvisitors?';
-      
-      if (managerId != null) {
-        url += 'managerId=$managerId&';
-      }
-      
-      if (status != null) {
-        url += 'status=$status';
-      }
-
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        return {
-          'success': true,
-          'data': data['data'],
-        };
+      final response = await http.get(url, headers: await _getHeaders());
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) {
+          return data;
+        }
+        return [];
       } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Failed to fetch field visitors',
-        };
+        throw Exception('Failed to load products');
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
+      throw Exception('Network error fetching products: $e');
     }
   }
 
-  // Create Transaction
-  static Future<Map<String, dynamic>> createTransaction({
-    required String transactionType, // 'BUY' or 'SELL'
-    required String memberId,
-    required String fieldVisitorId,
-    required String productId,
-    required String companyId,
-    required int quantity,
-    required String unitType,
-    required double unitPrice,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/transactions'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'transactionType': transactionType,
-          'memberId': memberId,
-          'fieldVisitorId': fieldVisitorId,
-          'productId': productId,
-          'companyId': companyId,
-          'quantity': quantity,
-          'unitType': unitType,
-          'unitPrice': unitPrice,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 201 && data['success'] == true) {
-        return {
-          'success': true,
-          'data': data['data'],
-        };
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Transaction failed',
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
-    }
-  }
-
-  // Get Transactions
-  static Future<Map<String, dynamic>> getTransactions({
-    String? fieldVisitorId,
+  static Future<List<dynamic>> getTransactions({
     String? memberId,
     String? type,
-    String? startDate,
-    String? endDate,
   }) async {
+    final queryParams = <String, String>{};
+    if (memberId != null) queryParams['memberId'] = memberId;
+    if (type != null) queryParams['type'] = type;
+
+    final url = Uri.parse(
+      '$baseUrl/transactions',
+    ).replace(queryParameters: queryParams);
     try {
-      String url = '$baseUrl/transactions?';
-      
-      if (fieldVisitorId != null) {
-        url += 'fieldVisitorId=$fieldVisitorId&';
-      }
-      
-      if (memberId != null) {
-        url += 'memberId=$memberId&';
-      }
-      
-      if (type != null) {
-        url += 'type=$type&';
-      }
-      
-      if (startDate != null) {
-        url += 'startDate=$startDate&';
-      }
-      
-      if (endDate != null) {
-        url += 'endDate=$endDate';
-      }
-
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        return {
-          'success': true,
-          'data': data['data'],
-        };
+      final response = await http.get(url, headers: await _getHeaders());
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body['success'] == true && body['data'] is List) {
+          return body['data'];
+        }
+        return [];
       } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Failed to fetch transactions',
-        };
+        throw Exception('Failed to load transactions: ${response.statusCode}');
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
+      throw Exception('Network error fetching transactions: $e');
     }
   }
-}
 
-// ==========================================
-// USAGE EXAMPLE: lib/screens/login_page.dart
-// ==========================================
-/*
-import 'package:flutter/material.dart';
-import '../services/api_service.dart';
-
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
-
-  @override
-  State<LoginPage> createState() => _LoginPageState();
-}
-
-class _LoginPageState extends State<LoginPage> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  String _selectedRole = 'field_visitor';
-  bool _isLoading = false;
-
-  Future<void> _handleLogin() async {
-    setState(() => _isLoading = true);
-
-    final result = await ApiService.login(
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
-      role: _selectedRole,
-    );
-
-    setState(() => _isLoading = false);
-
-    if (result['success']) {
-      // Login successful
-      final userData = result['data'];
-      
-      // Navigate based on role
-      if (_selectedRole == 'field_visitor') {
-        Navigator.pushReplacementNamed(context, '/field_dashboard');
-      } else if (_selectedRole == 'manager') {
-        Navigator.pushReplacementNamed(context, '/manager_dashboard');
+  static Future<List<dynamic>> getNotifications() async {
+    final url = Uri.parse('$baseUrl/notifications');
+    try {
+      final response = await http.get(url, headers: await _getHeaders());
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body['success'] == true && body['data'] is List) {
+          return body['data'];
+        }
+        return [];
+      } else {
+        throw Exception('Failed to load notifications: ${response.statusCode}');
       }
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login successful!')),
-      );
-    } else {
-      // Show error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message'] ?? 'Login failed'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    } catch (e) {
+      throw Exception('Network error fetching notifications: $e');
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
-            ),
-            const SizedBox(height: 16),
-            DropdownButton<String>(
-              value: _selectedRole,
-              items: const [
-                DropdownMenuItem(value: 'field_visitor', child: Text('Field Visitor')),
-                DropdownMenuItem(value: 'manager', child: Text('Manager')),
-              ],
-              onChanged: (value) => setState(() => _selectedRole = value!),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _handleLogin,
-              child: _isLoading
-                  ? const CircularProgressIndicator()
-                  : const Text('Login'),
-            ),
-          ],
-        ),
-      ),
-    );
+  static Future<List<dynamic>> getNotes() async {
+    final url = Uri.parse('$baseUrl/reports/field-visitor-dashboard');
+    try {
+      final response = await http.get(url, headers: await _getHeaders());
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final data = body is Map<String, dynamic> ? body['data'] : null;
+        if (body['success'] == true && data is Map<String, dynamic>) {
+          final notes = data['notes'];
+          if (notes is List) return notes;
+        }
+        if (data is Map && data['notes'] is List) {
+          return data['notes'] as List;
+        }
+        return [];
+      } else {
+        throw Exception('Failed to load notes: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error fetching notes: $e');
+    }
+  }
+
+  // Helper to add Auth headers
+  static Future<Map<String, String>> _getHeaders() async {
+    // Basic headers
+    final headers = {'Content-Type': 'application/json'};
+
+    // Add Token if available in Session
+    // We need to import session.dart at top of file first
+    // Assuming we can access AppSession.token
+    // Ideally we should inject session or pass it, but for this static class:
+    // We will add the import in a separate step or just assume the user updates it logic?
+    // Let's rely on AppSession being accessible if we import it.
+    // NOTE: We need to make sure AppSession import is added to this file.
+
+    // For now, we'll implement the logic, and I will add the import next.
+    if (AppSession.token != null) {
+      headers['Authorization'] = 'Bearer ${AppSession.token}';
+    }
+
+    return headers;
   }
 }
-*/
-
-// ==========================================
-// USAGE EXAMPLE: Member Registration
-// ==========================================
-/*
-Future<void> registerNewMember() async {
-  final result = await ApiService.registerMember(
-    fullName: 'John Doe',
-    mobile: '+94771234567',
-    email: 'john@example.com',
-    fieldVisitorId: 'visitor-uuid-here',
-    companyId: 'company-001',
-    nic: '123456789V',
-    postalAddress: 'Jaffna, Sri Lanka',
-    // Optional resident details
-    residentFullName: 'Jane Doe',
-    residentMobile: '+94777654321',
-    // Optional business details
-    landSize: '5.5',
-    waterFacility: 'Yes',
-  );
-
-  if (result['success']) {
-    print('Member registered: ${result['data']}');
-  } else {
-    print('Error: ${result['message']}');
-  }
-}
-*/
-
-// ==========================================
-// USAGE EXAMPLE: Get Members List
-// ==========================================
-/*
-Future<void> loadMembers() async {
-  final result = await ApiService.getMembers(
-    fieldVisitorId: 'your-visitor-id',
-    status: 'approved',
-  );
-
-  if (result['success']) {
-    final List members = result['data'];
-    print('Found ${members.length} members');
-    // Update your UI with the members list
-  } else {
-    print('Error: ${result['message']}');
-  }
-}
-*/
-
-// ==========================================
-// USAGE EXAMPLE: Create Transaction
-// ==========================================
-/*
-Future<void> createBuyTransaction() async {
-  final result = await ApiService.createTransaction(
-    transactionType: 'BUY',
-    memberId: 'member-uuid',
-    fieldVisitorId: 'visitor-uuid',
-    productId: 'prod-001',
-    companyId: 'company-001',
-    quantity: 10,
-    unitType: 'kg',
-    unitPrice: 50.0,
-  );
-
-  if (result['success']) {
-    print('Transaction created: ${result['data']}');
-  } else {
-    print('Error: ${result['message']}');
-  }
-}
-*/

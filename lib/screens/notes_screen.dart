@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_colors.dart';
+import '../services/api_service.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -9,7 +10,98 @@ class NotesScreen extends StatefulWidget {
 }
 
 class _NotesScreenState extends State<NotesScreen> {
-  List<Map<String, String>> notes = [];
+  bool _isLoading = false;
+  String? _error;
+  List<Map<String, dynamic>> notes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotes();
+  }
+
+  Future<void> _loadNotes() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final apiNotes = await ApiService.getNotes();
+      final parsed = apiNotes
+          .whereType<Map>()
+          .map((n) => Map<String, dynamic>.from(n))
+          .toList();
+
+      if (mounted) {
+        setState(() => notes = parsed);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  String _formatDate(dynamic raw) {
+    if (raw == null) return '';
+    try {
+      return DateTime.parse(raw.toString()).toLocal().toString().split('.').first;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  void _showNoteDetail(Map<String, dynamic> note) {
+    final createdAt = _formatDate(note['createdAt']);
+    final updatedAt = _formatDate(note['updatedAt']);
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                (note['title'] ?? 'Note').toString(),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              if ((note['category'] ?? '').toString().isNotEmpty)
+                Chip(
+                  label: Text((note['category'] ?? 'other').toString()),
+                  backgroundColor: Colors.green.shade50,
+                  side: BorderSide(color: Colors.green.shade200),
+                ),
+              if (createdAt.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Created: $createdAt', style: const TextStyle(color: Colors.grey)),
+              ],
+              if (updatedAt.isNotEmpty && updatedAt != createdAt) ...[
+                const SizedBox(height: 4),
+                Text('Updated: $updatedAt', style: const TextStyle(color: Colors.grey)),
+              ],
+              const SizedBox(height: 12),
+              Text(
+                (note['noteText'] ?? '').toString(),
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,211 +112,92 @@ class _NotesScreenState extends State<NotesScreen> {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         elevation: 1,
-      ),
-      body: notes.isEmpty
-          ? const Center(
-              child: Text(
-                'No Notes Yet',
-                style: TextStyle(fontSize: 18, color: Colors.grey),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(10),
-              itemCount: notes.length,
-              itemBuilder: (context, index) {
-                return Card(
-                  elevation: 2,
-                  child: ListTile(
-                    title: Text(
-                      notes[index]['title'] ?? '',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                    subtitle: Text(
-                      notes[index]['content'] ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EditNoteScreen(
-                            note: notes[index],
-                            index: index,
-                            onUpdate: (updatedNote) {
-                              setState(() {
-                                notes[index] = updatedNote;
-                              });
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () {
-                        setState(() {
-                          notes.removeAt(index);
-                        });
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.green,
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => EditNoteScreen(
-                onAdd: (newNote) {
-                  setState(() {
-                    notes.add(newNote);
-                  });
-                },
-              ),
-            ),
-          );
-        },
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-    );
-  }
-}
-
-class EditNoteScreen extends StatefulWidget {
-  final Map<String, String>? note;
-  final int? index;
-  final Function(Map<String, String>)? onAdd;
-  final Function(Map<String, String>)? onUpdate;
-
-  const EditNoteScreen({this.note, this.index, this.onAdd, this.onUpdate, super.key});
-
-  @override
-  State<EditNoteScreen> createState() => _EditNoteScreenState();
-}
-
-class _EditNoteScreenState extends State<EditNoteScreen> {
-  final TextEditingController titleController = TextEditingController();
-  final TextEditingController contentController = TextEditingController();
-  late bool _isEditing;
-  String? _originalTitle;
-  String? _originalContent;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.note != null) {
-      titleController.text = widget.note!['title'] ?? '';
-      contentController.text = widget.note!['content'] ?? '';
-      _originalTitle = titleController.text;
-      _originalContent = contentController.text;
-      _isEditing = false;
-    } else {
-      _isEditing = true;
-    }
-  }
-
-  void saveNote() {
-    final Map<String, String> note = {
-      'title': titleController.text,
-      'content': contentController.text,
-    };
-
-    if (widget.note == null) {
-      widget.onAdd?.call(note);
-    } else {
-      widget.onUpdate?.call(note);
-    }
-
-    Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.note == null ? 'New Note' : 'Edit Note'),
-        backgroundColor: AppColors.green,
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: saveNote,
-          )
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh, color: AppColors.green),
+            onPressed: _loadNotes,
+          ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(15),
-        child: Column(
-          children: [
-            TextField(
-              controller: titleController,
-              enabled: _isEditing,
-              decoration: const InputDecoration(
-                hintText: 'Title',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            Expanded(
-              child: TextField(
-                controller: contentController,
-                readOnly: !_isEditing,
-                maxLines: null,
-                expands: true,
-                decoration: const InputDecoration(
-                  hintText: 'Write your note...',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.green),
-                  onPressed: _isEditing ? saveNote : null,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text('Save', style: TextStyle(color: Colors.white)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton(
-                onPressed: () {
-                  setState(() {
-                    if (_isEditing) {
-                      if (widget.note != null) {
-                        titleController.text = _originalTitle ?? '';
-                        contentController.text = _originalContent ?? '';
-                        _isEditing = false;
-                      } else {
-                        Navigator.pop(context);
-                      }
-                    } else {
-                      _isEditing = true;
-                    }
-                  });
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-                  child: Text(_isEditing ? 'Cancel' : (widget.note == null ? 'Close' : 'Edit')),
-                ),
-              ),
-            ],
-          ),
-        ),
+      body: RefreshIndicator(
+        onRefresh: _loadNotes,
+        child: _isLoading && notes.isEmpty
+            ? ListView(
+                children: const [
+                  SizedBox(height: 240),
+                  Center(child: CircularProgressIndicator()),
+                ],
+              )
+            : _error != null
+                ? ListView(
+                    children: [
+                      const SizedBox(height: 120),
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.error_outline, color: Colors.redAccent),
+                              const SizedBox(height: 8),
+                              Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                              const SizedBox(height: 8),
+                              ElevatedButton(
+                                onPressed: _loadNotes,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : notes.isEmpty
+                    ? ListView(
+                        children: const [
+                          SizedBox(height: 200),
+                          Center(
+                            child: Text(
+                              'No Notes Yet',
+                              style: TextStyle(fontSize: 18, color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(10),
+                        itemCount: notes.length,
+                        itemBuilder: (context, index) {
+                          final note = notes[index];
+                          final created = _formatDate(note['createdAt']);
+                          return Card(
+                            elevation: 2,
+                            child: ListTile(
+                              title: Text(
+                                (note['title'] ?? 'Note').toString(),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              subtitle: Text(
+                                (note['noteText'] ?? '').toString(),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: created.isNotEmpty
+                                  ? Text(
+                                      created.split(' ').first,
+                                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                    )
+                                  : null,
+                              onTap: () => _showNoteDetail(note),
+                            ),
+                          );
+                        },
+                      ),
       ),
     );
   }

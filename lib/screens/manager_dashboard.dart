@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/api_service.dart';
 import 'buy_sell.dart';
 import '../app_colors.dart';
 import 'field_visitor_profile.dart';
@@ -10,11 +11,47 @@ import '../visitor_store.dart';
 import '../manager_footer.dart';
 import '../session.dart';
 
-class ManagerDashboard extends StatelessWidget {
+class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
 
   @override
+  State<ManagerDashboard> createState() => _ManagerDashboardState();
+}
+
+class _ManagerDashboardState extends State<ManagerDashboard> {
+  Map<String, dynamic>? _stats;
+  List<dynamic>? _yearlyAnalysis;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final stats = await ApiService.getDashboardStats();
+      final yearly = await ApiService.getYearlyAnalysis();
+      if (mounted) {
+        setState(() {
+          _stats = stats;
+          _yearlyAnalysis = yearly;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading manager dashboard: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     final textTheme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
     return Theme(
       data: Theme.of(context).copyWith(textTheme: textTheme),
@@ -117,20 +154,28 @@ class ManagerDashboard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 640;
-        // Compute totals from billHistory for the current month
-        final now = DateTime.now();
-        final month = now.month;
-        final totalBuy = billHistory.where((b) => b.date.month == month && b.type == 'BUY').fold<int>(0, (p, e) => p + e.quantity);
-        final totalSell = billHistory.where((b) => b.date.month == month && b.type == 'SELL').fold<int>(0, (p, e) => p + e.quantity);
+
+        final double buyAmount =
+            (_stats?['buy']?['amount'] as num?)?.toDouble() ?? 0.0;
+        final double sellAmount =
+            (_stats?['sell']?['amount'] as num?)?.toDouble() ?? 0.0;
+
         final items = [
-          _statCard('Monthly Buy (KG)', totalBuy.toString()),
-          _statCard('Monthly Sell (KG)', totalSell.toString()),
+          _statCard('Monthly Buy (Rs)', 'Rs ${buyAmount.toStringAsFixed(0)}'),
+          _statCard('Monthly Sell (Rs)', 'Rs ${sellAmount.toStringAsFixed(0)}'),
         ];
         return Wrap(
           spacing: 12,
           runSpacing: 12,
           children: items
-              .map((w) => SizedBox(width: isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth, child: w))
+              .map(
+                (w) => SizedBox(
+                  width: isWide
+                      ? (constraints.maxWidth - 12) / 2
+                      : constraints.maxWidth,
+                  child: w,
+                ),
+              )
               .toList(),
         );
       },
@@ -144,14 +189,22 @@ class ManagerDashboard extends StatelessWidget {
         color: AppColors.cardBg,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3))],
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey)),
+          Text(
+            title,
+            style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey),
+          ),
           const SizedBox(height: 8),
-          Text(value, style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w700),
+          ),
         ],
       ),
     );
@@ -165,17 +218,29 @@ class ManagerDashboard extends StatelessWidget {
           builder: (context, constraints) {
             // Use the centralized visitorStore for the canonical visitor list
             final visitorsCount = visitorStore.count;
-            final membersCountInt = farmerStore.farmers.length;
+            final membersCountInt =
+                _stats?['totalMembers'] ?? farmerStore.farmers.length;
             final isWide = constraints.maxWidth > 640;
             final cards = [
-              _infoCard('Field Visitors', visitorsCount.toString(), Icons.badge),
-              _infoCard('All Members', '$membersCountInt', Icons.group),
+              _infoCard(
+                'Field Visitors',
+                visitorsCount.toString(),
+                Icons.badge,
+              ),
+              _infoCard('Branch Members', '$membersCountInt', Icons.group),
             ];
             return Wrap(
               spacing: 12,
               runSpacing: 12,
               children: cards
-                  .map((w) => SizedBox(width: isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth, child: w))
+                  .map(
+                    (w) => SizedBox(
+                      width: isWide
+                          ? (constraints.maxWidth - 12) / 2
+                          : constraints.maxWidth,
+                      child: w,
+                    ),
+                  )
                   .toList(),
             );
           },
@@ -194,31 +259,43 @@ class ManagerDashboard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(backgroundColor: AppColors.lightGreen, child: Icon(icon, color: AppColors.green)),
+          CircleAvatar(
+            backgroundColor: AppColors.lightGreen,
+            child: Icon(icon, color: AppColors.green),
+          ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey)),
-              const SizedBox(height: 6),
-              Text(value, style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700)),
-            ]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  value,
+                  style: GoogleFonts.inter(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
-  
 
   Widget _buildMonthlyAmountCards() {
-    // Compute current month totals (amounts) from central bill history
+    // API provides pre-calculated totals
+    final double totalBuyAmount =
+        (_stats?['buy']?['amount'] as num?)?.toDouble() ?? 0.0;
+    final double totalSellAmount =
+        (_stats?['sell']?['amount'] as num?)?.toDouble() ?? 0.0;
+
     final now = DateTime.now();
-    final month = now.month;
-    final totalBuyAmount = billHistory
-        .where((b) => b.date.month == month && b.type == 'BUY')
-        .fold<double>(0.0, (p, e) => p + (e.total));
-    final totalSellAmount = billHistory
-        .where((b) => b.date.month == month && b.type == 'SELL')
-        .fold<double>(0.0, (p, e) => p + (e.total));
 
     String fmtRs(double v) {
       // Simple formatting: no decimals for whole-rupee display
@@ -235,13 +312,20 @@ class ManagerDashboard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${now.month}/${now.year} - Month Total (Rs)', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+          Text(
+            '${now.month}/${now.year} - Month Total (Rs)',
+            style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(child: _amountTile('Total Buy Amount', fmtRs(totalBuyAmount))),
+              Expanded(
+                child: _amountTile('Total Buy Amount', fmtRs(totalBuyAmount)),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _amountTile('Total Sell Amount', fmtRs(totalSellAmount))),
+              Expanded(
+                child: _amountTile('Total Sell Amount', fmtRs(totalSellAmount)),
+              ),
             ],
           ),
         ],
@@ -260,9 +344,15 @@ class ManagerDashboard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey)),
+          Text(
+            label,
+            style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey),
+          ),
           const SizedBox(height: 6),
-          Text(value, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
         ],
       ),
     );
@@ -274,7 +364,9 @@ class ManagerDashboard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.green, width: 1.25),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3))],
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3)),
+        ],
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
@@ -296,15 +388,43 @@ class ManagerDashboard extends StatelessWidget {
   }
 
   Widget _buildMonthlyTrendBarChart() {
-    // Build monthly buys/sells from central bill history
-    final buys = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'BUY').fold<int>(0, (p, e) => p + e.quantity));
-    final sells = List<int>.generate(12, (i) => billHistory.where((b) => b.date.month == i + 1 && b.type == 'SELL').fold<int>(0, (p, e) => p + e.quantity));
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final maxValue = [...buys, ...sells].isNotEmpty ? [...buys, ...sells].reduce((a, b) => a > b ? a : b) : 1;
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    // Parse API data or fallback to zeros
+    final List<dynamic> analysis =
+        _yearlyAnalysis ??
+        List.generate(12, (i) => {'month': i + 1, 'buy': 0, 'sell': 0});
+
+    // Extract max value for scaling
+    double maxValue = 0;
+    for (var item in analysis) {
+      final b = (item['buy'] as num).toDouble();
+      final s = (item['sell'] as num).toDouble();
+      if (b > maxValue) maxValue = b;
+      if (s > maxValue) maxValue = s;
+    }
+    if (maxValue == 0) maxValue = 100;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Buys vs Sells - Monthly Trend', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        Text(
+          'Buys vs Sells - Monthly Trend (Rs)',
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 12),
         SizedBox(
           height: 300,
@@ -312,19 +432,42 @@ class ManagerDashboard extends StatelessWidget {
             BarChartData(
               maxY: (maxValue * 1.15).ceilToDouble(),
               gridData: FlGridData(show: true, drawVerticalLine: false),
-              borderData: FlBorderData(show: true, border: const Border.symmetric(horizontal: BorderSide(color: Colors.black12))),
+              borderData: FlBorderData(
+                show: true,
+                border: const Border.symmetric(
+                  horizontal: BorderSide(color: Colors.black12),
+                ),
+              ),
               titlesData: FlTitlesData(
-                rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36)),
+                rightTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                topTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 42,
+                    getTitlesWidget: (v, m) => Text(
+                      v.toInt().toString(),
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                  ),
+                ),
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
                     getTitlesWidget: (value, meta) {
-                      if (value < 0 || value > 11) return const SizedBox.shrink();
+                      if (value < 0 || value > 11) {
+                        return const SizedBox.shrink();
+                      }
                       return Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Text(months[value.toInt()], style: GoogleFonts.inter(fontSize: 10)),
+                        child: Text(
+                          months[value.toInt()],
+                          style: GoogleFonts.inter(fontSize: 10),
+                        ),
                       );
                     },
                   ),
@@ -337,18 +480,39 @@ class ManagerDashboard extends StatelessWidget {
                     final isSell = rod.color == Colors.red;
                     return BarTooltipItem(
                       '${isSell ? 'Sell' : 'Buy'}: ${rod.toY.toInt()}',
-                      GoogleFonts.inter(fontWeight: FontWeight.w600, color: rod.color),
+                      GoogleFonts.inter(
+                        fontWeight: FontWeight.w600,
+                        color: rod.color,
+                      ),
                     );
                   },
                 ),
               ),
               barGroups: List.generate(12, (i) {
+                // Find data for month i+1
+                final monthData = analysis.firstWhere(
+                  (m) => m['month'] == i + 1,
+                  orElse: () => {'buy': 0, 'sell': 0},
+                );
+                final buyVal = (monthData['buy'] as num).toDouble();
+                final sellVal = (monthData['sell'] as num).toDouble();
+
                 return BarChartGroupData(
                   x: i,
                   barsSpace: 8,
                   barRods: [
-                    BarChartRodData(toY: buys[i].toDouble(), color: Colors.blue, width: 12, borderRadius: BorderRadius.circular(4)),
-                    BarChartRodData(toY: sells[i].toDouble(), color: Colors.red, width: 12, borderRadius: BorderRadius.circular(4)),
+                    BarChartRodData(
+                      toY: buyVal,
+                      color: Colors.blue,
+                      width: 12,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    BarChartRodData(
+                      toY: sellVal,
+                      color: Colors.red,
+                      width: 12,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ],
                 );
               }),
@@ -358,9 +522,13 @@ class ManagerDashboard extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            _legendDot(Colors.red), const SizedBox(width: 6), Text('Total Sell', style: GoogleFonts.inter(fontSize: 12)),
+            _legendDot(Colors.red),
+            const SizedBox(width: 6),
+            Text('Total Sell', style: GoogleFonts.inter(fontSize: 12)),
             const SizedBox(width: 18),
-            _legendDot(Colors.blue), const SizedBox(width: 6), Text('Total Buy', style: GoogleFonts.inter(fontSize: 12)),
+            _legendDot(Colors.blue),
+            const SizedBox(width: 6),
+            Text('Total Buy', style: GoogleFonts.inter(fontSize: 12)),
           ],
         ),
       ],
@@ -368,10 +536,10 @@ class ManagerDashboard extends StatelessWidget {
   }
 
   Widget _legendDot(Color c) => Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-      );
+    width: 12,
+    height: 12,
+    decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+  );
 
   Widget _buildAddFieldVisitorButton(BuildContext context) {
     return SizedBox(
@@ -380,14 +548,23 @@ class ManagerDashboard extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.green,
           padding: const EdgeInsets.symmetric(vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
         onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const RegistrationScreen()),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const RegistrationScreen()));
         },
-        child: Text('+  Add Field Visitor', style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+        child: Text(
+          '+  Add Field Visitor',
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -402,11 +579,19 @@ class ManagerDashboard extends StatelessWidget {
         final all = visitorStore.visitors.toList().reversed.toList();
         final recent = all.take(6).toList();
         final visitorWidgets = recent.map((v) {
-          final visits = billHistory.where((b) => b.fieldVisitorCode == v.code).toList();
+          final visits = billHistory
+              .where((b) => b.fieldVisitorCode == v.code)
+              .toList();
           final totalKg = visits.fold<int>(0, (p, e) => p + e.quantity);
           // percent placeholder; could be computed against a target later
           final percent = 0;
-          return _visitorTile(context, '${v.name} (${v.code})', 'Visitor', '${totalKg}Kg', percent);
+          return _visitorTile(
+            context,
+            '${v.name} (${v.code})',
+            'Visitor',
+            '${totalKg}Kg',
+            percent,
+          );
         }).toList();
 
         return Column(
@@ -415,10 +600,20 @@ class ManagerDashboard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Field Visitors', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(
+                  'Field Visitors',
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
                 TextButton(
                   onPressed: () {
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FieldVisitorsListScreen()));
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const FieldVisitorsListScreen(),
+                      ),
+                    );
                   },
                   child: const Text('See all'),
                 ),
@@ -432,7 +627,13 @@ class ManagerDashboard extends StatelessWidget {
     );
   }
 
-  Widget _visitorTile(BuildContext context, String name, String type, String weight, int percent) {
+  Widget _visitorTile(
+    BuildContext context,
+    String name,
+    String type,
+    String weight,
+    int percent,
+  ) {
     return InkWell(
       onTap: () {
         final codeMatch = RegExp(r"\(([^)]+)\)").firstMatch(name);
@@ -452,56 +653,74 @@ class ManagerDashboard extends StatelessWidget {
         );
       },
       child: Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: AppColors.lightGreen,
-            child: const Icon(Icons.person, color: AppColors.green),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: LinearProgressIndicator(
-                        value: percent / 100,
-                        minHeight: 7,
-                        backgroundColor: Colors.grey.shade300,
-                        color: AppColors.green,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: AppColors.lightGreen,
+              child: const Icon(Icons.person, color: AppColors.green),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: LinearProgressIndicator(
+                          value: percent / 100,
+                          minHeight: 7,
+                          backgroundColor: Colors.grey.shade300,
+                          color: AppColors.green,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text('$percent%', style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey)),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        '$percent%',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: AppColors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  type,
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  weight,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(type, style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey)),
-              const SizedBox(height: 6),
-              Text(weight, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 

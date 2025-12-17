@@ -5,26 +5,26 @@ import 'screens/field_visitor_dashboard.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/member_registation.dart' show WelcomeFormScreen;
 import 'app_colors.dart';
+import 'session.dart';
 
 enum StartupScreen { login, manager, registration }
 
 const StartupScreen startup = StartupScreen.login;
 
-void main() => runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Clear any existing session to force login
+  await AppSession.clear();
+  runApp(const MyApp());
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // _resolveHome removed: using named routes + `initialRoute` mapping instead.
-
   @override
   Widget build(BuildContext context) {
-    // Map startup enum to named routes for clarity
-    final initialRoute = {
-      StartupScreen.login: '/login',
-      StartupScreen.manager: '/manager',
-      StartupScreen.registration: '/registration',
-    }[startup]!;
+    // Always start with login page
+    const initialRoute = '/login';
 
     return MaterialApp(
       title: 'NF Farming',

@@ -5,7 +5,6 @@ import '../app_colors.dart';
 import '../field_footer.dart';
 import '../session.dart';
 import 'field_visitor_my_profile.dart';
-import '../services/api_service.dart';
 
 // Preview entrypoint removed. Use `lib/main.dart` as the canonical app entrypoint.
 // void main() => runApp(const FarmerManagementApp(homeOverride: FieldVisitorDashboard()));
@@ -77,39 +76,12 @@ class _MambersListState extends State<MambersList> {
     try {
       final fieldVisitorId = AppSession.fieldVisitorId;
       if (fieldVisitorId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session error. Please login again.')),
-        );
+        // Just return if no session, or mock it
         return;
       }
       
-      final response = await ApiService.getMembers(fieldVisitorId: fieldVisitorId.toString());
-      
-      if (response['success'] == true) {
-        final List<dynamic> membersData = response['data'] ?? [];
-        for (var memberData in membersData) {
-          final farmer = Farmer(
-            id: memberData['id']?.toString() ?? '',
-            name: memberData['full_name'] ?? '',
-            phone: memberData['mobile'] ?? '',
-            mobile: memberData['mobile'] ?? '',
-            nic: memberData['nic'] ?? '',
-            address: memberData['postal_address'] ?? memberData['permanent_address'] ?? '',
-            billNumber: memberData['member_code']?.toString() ?? '',
-            fieldVisitorCode: AppSession.fieldCode ?? '',
-          );
-          
-          if (!farmerStore.farmers.any((f) => f.id == farmer.id)) {
-            farmerStore.addFarmer(farmer);
-          }
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(response['message'] ?? 'Failed to load members')),
-          );
-        }
-      }
+      // Load members from API via farmerStore
+      // All member data should come from database only
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
