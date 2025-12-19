@@ -50,7 +50,9 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
       return;
     }
 
-    debugPrint('Loading members for field visitor: ${AppSession.fieldVisitorId}');
+    debugPrint(
+      'Loading members for field visitor: ${AppSession.fieldVisitorId}',
+    );
     setState(() => _isLoading = true);
 
     try {
@@ -155,7 +157,8 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
           } catch (_) {}
         }
 
-        final sameMonth = date != null && date.month == now.month && date.year == now.year;
+        final sameMonth =
+            date != null && date.month == now.month && date.year == now.year;
         if (!sameMonth) continue;
 
         if (type == 'buy') {
@@ -434,74 +437,70 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
 
                   const SizedBox(height: 16),
 
-                  // Pie Charts Row — show current-month totals and this field visitor's participation (KG from bill history)
+                  // Pie Charts Row — show API data from backend dashboard
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Builder(
                       builder: (context) {
-                        // Compute totals from billHistory (quantity treated as KG)
-                        final now = DateTime.now();
-                        final month = now.month;
-                        final totalBuy = billHistory
-                            .where(
-                              (b) => b.date.month == month && b.type == 'BUY',
-                            )
-                            .fold<double>(
-                              0.0,
-                              (p, e) => p + e.quantity.toDouble(),
-                            );
-                        final totalSell = billHistory
-                            .where(
-                              (b) => b.date.month == month && b.type == 'SELL',
-                            )
-                            .fold<double>(
-                              0.0,
-                              (p, e) => p + e.quantity.toDouble(),
-                            );
-                        final visitorCode = AppSession.displayFieldCode;
-                        final visitorBuy = billHistory
-                            .where(
-                              (b) =>
-                                  b.date.month == month &&
-                                  b.type == 'BUY' &&
-                                  b.fieldVisitorCode == visitorCode,
-                            )
-                            .fold<double>(
-                              0.0,
-                              (p, e) => p + e.quantity.toDouble(),
-                            );
-                        final visitorSell = billHistory
-                            .where(
-                              (b) =>
-                                  b.date.month == month &&
-                                  b.type == 'SELL' &&
-                                  b.fieldVisitorCode == visitorCode,
-                            )
-                            .fold<double>(
-                              0.0,
-                              (p, e) => p + e.quantity.toDouble(),
-                            );
-                        final restBuy = (totalBuy - visitorBuy).clamp(
+                        // Use API pie data from dashboard
+                        final pieData = _stats?['pie'] as Map<String, dynamic>?;
+                        final slices = (pieData?['slices'] as List?) ?? [];
+
+                        final myId = AppSession.fieldVisitorId;
+                        double myBuy = 0.0;
+                        double mySell = 0.0;
+                        double othersBuy = 0.0;
+                        double othersSell = 0.0;
+
+                        // Sum from pie slices matching this field visitor for buy/sell
+                        for (final slice in slices.whereType<Map>()) {
+                          final fvId = slice['fieldVisitorId']?.toString();
+
+                          if (fvId == myId) {
+                            // This field visitor's data - split into buy/sell from transactions
+                            final txList =
+                                (_stats?['transactions'] as List?) ?? [];
+                            for (final tx in txList.whereType<Map>()) {
+                              final txType = (tx['type'] ?? '')
+                                  .toString()
+                                  .toLowerCase();
+                              final txQty =
+                                  (tx['quantity'] as num?)?.toDouble() ?? 0.0;
+
+                              if (txType == 'buy') myBuy += txQty;
+                              if (txType == 'sell') mySell += txQty;
+                            }
+                          }
+                        }
+
+                        // Compute branch totals for "Others"
+                        final branchTotal =
+                            (pieData?['total'] as num?)?.toDouble() ?? 0.0;
+                        final myTotal = myBuy + mySell;
+                        final othersTotal = (branchTotal - myTotal).clamp(
                           0.0,
                           double.infinity,
                         );
-                        final restSell = (totalSell - visitorSell).clamp(
-                          0.0,
-                          double.infinity,
-                        );
+
+                        // Split others proportionally (assume 50/50 buy/sell for simplicity)
+                        othersBuy = othersTotal / 2;
+                        othersSell = othersTotal / 2;
+
+                        final totalBuy = myBuy + othersBuy;
+                        final totalSell = mySell + othersSell;
 
                         final buyData = totalBuy > 0
                             ? [
                                 {
                                   'label': 'This Visitor',
-                                  'value': visitorBuy / totalBuy,
-                                  'amount': visitorBuy,
+                                  'value': myBuy / totalBuy,
+                                  'amount': myBuy,
                                   'color': const Color(0xFF90EE90),
                                 },
                                 {
                                   'label': 'Others',
-                                  'value': restBuy / totalBuy,
-                                  'amount': restBuy,
+                                  'value': othersBuy / totalBuy,
+                                  'amount': othersBuy,
                                   'color': const Color(0xFF228B22),
                                 },
                               ]
@@ -524,14 +523,14 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
                             ? [
                                 {
                                   'label': 'This Visitor',
-                                  'value': visitorSell / totalSell,
-                                  'amount': visitorSell,
+                                  'value': mySell / totalSell,
+                                  'amount': mySell,
                                   'color': const Color(0xFFFF6B6B),
                                 },
                                 {
                                   'label': 'Others',
-                                  'value': restSell / totalSell,
-                                  'amount': restSell,
+                                  'value': othersSell / totalSell,
+                                  'amount': othersSell,
                                   'color': const Color(0xFFDC143C),
                                 },
                               ]

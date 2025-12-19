@@ -14,7 +14,7 @@ class ApiService {
       return 'http://10.0.2.2:3000/api'; // Android Emulator
       // return 'http://192.168.8.100:3000/api'; // Use this for physical device
     }
-    return 'http://127.0.0.1:3000/api'; // iOS Simulator
+    return 'http://127.0.0.1:3000/api'; // iOS Simulator / Desktop
   }
 
   // Timeout duration for all HTTP requests
@@ -253,18 +253,13 @@ class ApiService {
   }
 
   static Future<List<dynamic>> getNotes() async {
-    final url = Uri.parse('$baseUrl/reports/field-visitor-dashboard');
+    final url = Uri.parse('$baseUrl/notes');
     try {
       final response = await http.get(url, headers: await _getHeaders());
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        final data = body is Map<String, dynamic> ? body['data'] : null;
-        if (body['success'] == true && data is Map<String, dynamic>) {
-          final notes = data['notes'];
-          if (notes is List) return notes;
-        }
-        if (data is Map && data['notes'] is List) {
-          return data['notes'] as List;
+        if (body['success'] == true && body['data'] is List) {
+          return body['data'];
         }
         return [];
       } else {
@@ -272,6 +267,83 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Network error fetching notes: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> createNote({
+    required String title,
+    required String noteText,
+    String? category,
+  }) async {
+    final url = Uri.parse('$baseUrl/notes');
+    try {
+      final response = await http.post(
+        url,
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          'title': title,
+          'noteText': noteText,
+          if (category != null) 'category': category,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        if (body['success'] == true) {
+          return body;
+        }
+        throw Exception(body['message'] ?? 'Failed to create note');
+      } else {
+        throw Exception('Failed to create note: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error creating note: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateNote({
+    required String noteId,
+    String? title,
+    String? noteText,
+    String? category,
+  }) async {
+    final url = Uri.parse('$baseUrl/notes/$noteId');
+    try {
+      final response = await http.put(
+        url,
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          if (title != null) 'title': title,
+          if (noteText != null) 'noteText': noteText,
+          if (category != null) 'category': category,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body['success'] == true) {
+          return body;
+        }
+        throw Exception(body['message'] ?? 'Failed to update note');
+      } else {
+        throw Exception('Failed to update note: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error updating note: $e');
+    }
+  }
+
+  static Future<void> deleteNote(String noteId) async {
+    final url = Uri.parse('$baseUrl/notes/$noteId');
+    try {
+      final response = await http.delete(url, headers: await _getHeaders());
+
+      if (response.statusCode != 200) {
+        final body = jsonDecode(response.body);
+        throw Exception(body['message'] ?? 'Failed to delete note');
+      }
+    } catch (e) {
+      throw Exception('Network error deleting note: $e');
     }
   }
 

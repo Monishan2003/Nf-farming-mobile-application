@@ -133,6 +133,18 @@ class FarmerStore extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Update a farmer's transaction totals and notify listeners
+  void updateFarmerTotals(String farmerId, double buyTotal, double sellTotal) {
+    try {
+      final farmer = _farmers.firstWhere((f) => f.id == farmerId);
+      farmer.totalBuy = buyTotal;
+      farmer.totalSell = sellTotal;
+      notifyListeners();
+    } catch (_) {
+      // Farmer not found, ignore
+    }
+  }
 }
 
 final FarmerStore farmerStore = FarmerStore();
@@ -770,6 +782,25 @@ class _BuyingScreenState extends State<BuyingScreen> {
                   if (result['success'] == true) {
                     // API save successful
                     farmerStore.addBuy(amount);
+
+                    // Reload member data to get updated transaction totals
+                    try {
+                      final members = await ApiService.getMembers();
+                      for (var member in members) {
+                        if (member['id'] == f.id) {
+                          final newBuy =
+                              (member['totalBuyQty'] as num?)?.toDouble() ??
+                              0.0;
+                          final newSell =
+                              (member['totalSellQty'] as num?)?.toDouble() ??
+                              0.0;
+                          farmerStore.updateFarmerTotals(f.id, newBuy, newSell);
+                          break;
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint('Error reloading member data: $e');
+                    }
                     final billNo =
                         (result['data']
                             as Map<String, dynamic>)['billNumber'] ??
@@ -1410,13 +1441,8 @@ class _SellingScreenState extends State<SellingScreen> {
                   };
                   debugPrint('SELL payload => $sellPayload');
 
-                  // Call API to save transaction
-                  // Mock API save transaction
-                  await Future.delayed(const Duration(seconds: 1));
-                  final result = {
-                    'success': true,
-                    'data': {'billNumber': null},
-                  };
+                  // Real API Call
+                  final result = await ApiService.saveTransaction(sellPayload);
 
                   if (!mounted) return;
                   Navigator.of(context).pop(); // Close loading dialog
@@ -1424,6 +1450,25 @@ class _SellingScreenState extends State<SellingScreen> {
                   if (result['success'] == true) {
                     // API save successful
                     farmerStore.addSell(amount);
+
+                    // Reload member data to get updated transaction totals
+                    try {
+                      final members = await ApiService.getMembers();
+                      for (var member in members) {
+                        if (member['id'] == f.id) {
+                          final newBuy =
+                              (member['totalBuyQty'] as num?)?.toDouble() ??
+                              0.0;
+                          final newSell =
+                              (member['totalSellQty'] as num?)?.toDouble() ??
+                              0.0;
+                          farmerStore.updateFarmerTotals(f.id, newBuy, newSell);
+                          break;
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint('Error reloading member data: $e');
+                    }
                     final billNo =
                         (result['data']
                             as Map<String, dynamic>)['billNumber'] ??

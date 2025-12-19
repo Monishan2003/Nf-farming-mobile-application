@@ -47,6 +47,100 @@ class _NotesScreenState extends State<NotesScreen> {
     }
   }
 
+  Future<void> _showAddNoteDialog() async {
+    final titleCtrl = TextEditingController();
+    final textCtrl = TextEditingController();
+    String category = 'observation';
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Note'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textCtrl,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Note Text',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: category,
+                decoration: const InputDecoration(
+                  labelText: 'Category',
+                  border: OutlineInputBorder(),
+                ),
+                items: ['observation', 'reminder', 'report', 'other']
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (val) => category = val ?? 'observation',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (titleCtrl.text.trim().isEmpty || textCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Title and text are required')),
+                );
+                return;
+              }
+              Navigator.of(ctx).pop(true);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      try {
+        setState(() => _isLoading = true);
+        await ApiService.createNote(
+          title: titleCtrl.text.trim(),
+          noteText: textCtrl.text.trim(),
+          category: category,
+        );
+        await _loadNotes();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Note created successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+
+    titleCtrl.dispose();
+    textCtrl.dispose();
+  }
+
   String _formatDate(dynamic raw) {
     if (raw == null) return '';
     try {
@@ -119,6 +213,11 @@ class _NotesScreenState extends State<NotesScreen> {
             onPressed: _loadNotes,
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppColors.green,
+        onPressed: _showAddNoteDialog,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
       body: RefreshIndicator(
         onRefresh: _loadNotes,
