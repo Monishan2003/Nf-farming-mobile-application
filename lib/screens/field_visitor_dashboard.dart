@@ -137,34 +137,40 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
     final int myMembers = registeredMembers;
     final int reminders = (_stats?['notifications'] as List?)?.length ?? 0;
 
-    // Use API stats for accurate monthly totals
-    final transactions = (_stats?['transactions'] as List?) ?? [];
+    // Use backend-provided monthly totals when available; fall back to client calculation
     double monthlyBuy = 0.0;
     double monthlySell = 0.0;
-    if (transactions.isNotEmpty) {
-      final now = DateTime.now();
-      for (final tx in transactions.whereType<Map>()) {
-        final type = (tx['type'] ?? '').toString();
-        double amount = 0.0;
-        final rawAmount = tx['totalAmount'];
-        if (rawAmount is num) amount = rawAmount.toDouble();
+    final monthlyTotals = _stats?['monthlyTotals'] as Map?;
+    if (monthlyTotals != null) {
+      monthlyBuy = (monthlyTotals['buyAmount'] as num?)?.toDouble() ?? 0.0;
+      monthlySell = (monthlyTotals['sellAmount'] as num?)?.toDouble() ?? 0.0;
+    } else {
+      final transactions = (_stats?['transactions'] as List?) ?? [];
+      if (transactions.isNotEmpty) {
+        final now = DateTime.now();
+        for (final tx in transactions.whereType<Map>()) {
+          final type = (tx['type'] ?? '').toString();
+          double amount = 0.0;
+          final rawAmount = tx['totalAmount'];
+          if (rawAmount is num) amount = rawAmount.toDouble();
 
-        final rawDate = tx['date']?.toString();
-        DateTime? date;
-        if (rawDate != null) {
-          try {
-            date = DateTime.parse(rawDate).toLocal();
-          } catch (_) {}
-        }
+          final rawDate = tx['date']?.toString();
+          DateTime? date;
+          if (rawDate != null) {
+            try {
+              date = DateTime.parse(rawDate).toLocal();
+            } catch (_) {}
+          }
 
-        final sameMonth =
-            date != null && date.month == now.month && date.year == now.year;
-        if (!sameMonth) continue;
+          final sameMonth =
+              date != null && date.month == now.month && date.year == now.year;
+          if (!sameMonth) continue;
 
-        if (type == 'buy') {
-          monthlyBuy += amount;
-        } else if (type == 'sell') {
-          monthlySell += amount;
+          if (type == 'buy') {
+            monthlyBuy += amount;
+          } else if (type == 'sell') {
+            monthlySell += amount;
+          }
         }
       }
     }
@@ -442,52 +448,71 @@ class _FieldVisitorDashboardState extends State<FieldVisitorDashboard> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Builder(
                       builder: (context) {
-                        // Use API pie data from dashboard
-                        final pieData = _stats?['pie'] as Map<String, dynamic>?;
-                        final slices = (pieData?['slices'] as List?) ?? [];
+                        // Prefer backend-provided pie data (quantities) else fall back to legacy calculation
+                        final buyPie = _stats?['buyPie'] as Map?;
+                        final sellPie = _stats?['sellPie'] as Map?;
 
-                        final myId = AppSession.fieldVisitorId;
                         double myBuy = 0.0;
                         double mySell = 0.0;
                         double othersBuy = 0.0;
                         double othersSell = 0.0;
+                        double totalBuy = 0.0;
+                        double totalSell = 0.0;
 
-                        // Sum from pie slices matching this field visitor for buy/sell
-                        for (final slice in slices.whereType<Map>()) {
-                          final fvId = slice['fieldVisitorId']?.toString();
+                        if (buyPie != null && sellPie != null) {
+                          myBuy =
+                              (buyPie['thisVisitor'] as num?)?.toDouble() ??
+                              0.0;
+                          othersBuy =
+                              (buyPie['others'] as num?)?.toDouble() ?? 0.0;
+                          totalBuy =
+                              (buyPie['total'] as num?)?.toDouble() ??
+                              (myBuy + othersBuy);
 
-                          if (fvId == myId) {
-                            // This field visitor's data - split into buy/sell from transactions
-                            final txList =
-                                (_stats?['transactions'] as List?) ?? [];
-                            for (final tx in txList.whereType<Map>()) {
-                              final txType = (tx['type'] ?? '')
-                                  .toString()
-                                  .toLowerCase();
-                              final txQty =
-                                  (tx['quantity'] as num?)?.toDouble() ?? 0.0;
+                          mySell =
+                              (sellPie['thisVisitor'] as num?)?.toDouble() ??
+                              0.0;
+                          othersSell =
+                              (sellPie['others'] as num?)?.toDouble() ?? 0.0;
+                          totalSell =
+                              (sellPie['total'] as num?)?.toDouble() ??
+                              (mySell + othersSell);
+                        } else {
+                          // Legacy: derive from pie slices + transactions
+                          final pieData =
+                              _stats?['pie'] as Map<String, dynamic>?;
+                          final slices = (pieData?['slices'] as List?) ?? [];
+                          final myId = AppSession.fieldVisitorId;
 
-                              if (txType == 'buy') myBuy += txQty;
-                              if (txType == 'sell') mySell += txQty;
+                          for (final slice in slices.whereType<Map>()) {
+                            final fvId = slice['fieldVisitorId']?.toString();
+                            if (fvId == myId) {
+                              final txList =
+                                  (_stats?['transactions'] as List?) ?? [];
+                              for (final tx in txList.whereType<Map>()) {
+                                final txType = (tx['type'] ?? '')
+                                    .toString()
+                                    .toLowerCase();
+                                final txQty =
+                                    (tx['quantity'] as num?)?.toDouble() ?? 0.0;
+                                if (txType == 'buy') myBuy += txQty;
+                                if (txType == 'sell') mySell += txQty;
+                              }
                             }
                           }
+
+                          final branchTotal =
+                              (pieData?['total'] as num?)?.toDouble() ?? 0.0;
+                          final myTotal = myBuy + mySell;
+                          final othersTotal = (branchTotal - myTotal).clamp(
+                            0.0,
+                            double.infinity,
+                          );
+                          othersBuy = othersTotal / 2;
+                          othersSell = othersTotal / 2;
+                          totalBuy = myBuy + othersBuy;
+                          totalSell = mySell + othersSell;
                         }
-
-                        // Compute branch totals for "Others"
-                        final branchTotal =
-                            (pieData?['total'] as num?)?.toDouble() ?? 0.0;
-                        final myTotal = myBuy + mySell;
-                        final othersTotal = (branchTotal - myTotal).clamp(
-                          0.0,
-                          double.infinity,
-                        );
-
-                        // Split others proportionally (assume 50/50 buy/sell for simplicity)
-                        othersBuy = othersTotal / 2;
-                        othersSell = othersTotal / 2;
-
-                        final totalBuy = myBuy + othersBuy;
-                        final totalSell = mySell + othersSell;
 
                         final buyData = totalBuy > 0
                             ? [
